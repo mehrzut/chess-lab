@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Opening stats, endgame stats and Stockfish game review for your chess.com games.">
+<title>Chess Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">Chess Lab</div>
+  <form id="loadForm" class="load">
+    <label for="user" class="sr">chess.com username</label>
+    <input id="user" value="mehrzut" autocomplete="off" spellcheck="false" placeholder="chess.com username">
+    <label for="months" class="sr">Months to load</label>
+    <select id="months">
+      <option value="3">Last 3 months</option>
+      <option value="6">Last 6 months</option>
+      <option value="12" selected>Last 12 months</option>
+      <option value="36">Last 3 years</option>
+      <option value="0">Everything</option>
+    </select>
+    <button id="loadBtn" type="submit" class="primary">Import games</button>
+  </form>
+  <div id="status" class="status" role="status"></div>
+  <button id="themeBtn" class="ghost" aria-label="Switch light and dark theme">Theme</button>
+</header>
+
+<nav class="tabs" id="tabs" hidden>
+  <button data-tab="stats" class="on">Openings and stats</button>
+  <button data-tab="review">Game review</button>
+</nav>
+
+<main>
+  <section id="empty" class="empty">
+    <h1>Import your chess.com games and see where your rating goes.</h1>
+    <p>Enter a username and press Import games. Games come from chess.com's public API, so no password is needed. Opening and endgame stats are worked out in your browser. Game review runs Stockfish on your own device.</p>
+  </section>
+
+  <section id="stats" hidden>
+    <div id="tiles" class="tiles"></div>
+    <div class="filters">
+      <div class="seg" id="fColor" role="group" aria-label="Color">
+        <button data-v="all" class="on">Both colors</button><button data-v="white">White</button><button data-v="black">Black</button>
+      </div>
+      <div class="seg" id="fTc" role="group" aria-label="Time control"></div>
+      <div class="seg" id="fGroup" role="group" aria-label="Group openings by">
+        <button data-v="family" class="on">Opening family</button><button data-v="variation">Variation</button>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h2>Rating over time</h2><canvas id="ratingChart" height="230"></canvas></div>
+      <div class="panel"><h2>Results by color</h2><div id="colorSplit"></div></div>
+    </div>
+    <div class="grid3">
+      <div class="panel"><h2>Best and worst openings</h2><div id="bestWorst"></div></div>
+      <div class="panel"><h2>How your games end</h2><div id="endings"></div></div>
+      <div class="panel"><h2>Against stronger and weaker players</h2><div id="vsStrength"></div></div>
+    </div>
+    <div class="panel"><h2>Results by weekday</h2><div id="weekdays" class="weekdays"></div></div>
+    <div class="panel">
+      <h2>Openings you played <span class="muted">Click a row to review those games. Click a heading to sort.</span></h2>
+      <div class="scroll"><table id="openTable"></table></div>
+    </div>
+    <div class="panel">
+      <h2>Endgames</h2>
+      <div class="scroll"><table id="endTable"></table></div>
+    </div>
+  </section>
+
+  <section id="review" hidden>
+    <div class="reviewLayout">
+      <aside class="panel gameList">
+        <h2>Games <span id="listNote" class="muted"></span></h2>
+        <div id="gameList"></div>
+      </aside>
+
+      <div class="boardCol">
+        <div id="gameMeta" class="gameMeta"><span class="muted">Pick a game from the list.</span></div>
+        <div class="playerBar" id="topBar"></div>
+        <div class="boardWrap">
+          <div id="evalBar" class="evalBar" title="Evaluation"><div id="evalFill"></div><span id="evalNum"></span></div>
+          <div class="boardBox">
+            <div id="board" class="board"></div>
+            <svg id="arrows" class="arrows" viewBox="0 0 8 8" aria-hidden="true"></svg>
+          </div>
+        </div>
+        <div class="playerBar" id="botBar"></div>
+        <div class="controls">
+          <button id="bStart" aria-label="First move">|&lt;</button>
+          <button id="bPrev" aria-label="Previous move">&lt;</button>
+          <button id="bPlay" aria-label="Play or pause">Play</button>
+          <button id="bNext" aria-label="Next move">&gt;</button>
+          <button id="bEnd" aria-label="Last move">&gt;|</button>
+          <button id="bFlip">Flip board</button>
+          <span class="spacer"></span>
+          <label for="depth" class="sr">Engine depth</label>
+          <select id="depth"><option value="10">Quick</option><option value="12" selected>Standard</option><option value="15">Deep</option></select>
+          <button id="bAnalyze" class="primary">Analyze with Stockfish</button>
+        </div>
+        <div id="progress" class="progress" hidden><div id="progressBar"></div></div>
+        <div id="coach" class="coach"></div>
+        <div class="panel graphPanel">
+          <h2>Evaluation <span class="muted">Click or drag to jump to a move</span></h2>
+          <canvas id="evalChart" height="150"></canvas>
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="panel">
+          <div class="sideTabs" id="sideTabs" role="tablist">
+            <button data-s="moves" class="on" role="tab">Moves</button>
+            <button data-s="summary" role="tab">Summary</button>
+            <button data-s="moments" role="tab">Key moments</button>
+          </div>
+          <div id="sMoves" class="moves"></div>
+          <div id="sSummary" hidden></div>
+          <div id="sMoments" hidden></div>
+        </div>
+        <p class="hint">Shortcuts: left and right arrows step through moves, space plays, F flips the board.</p>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">Chess Lab is not affiliated with chess.com. Data comes from the chess.com public API. Analysis by Stockfish. Pieces: cburnett set from lichess.org, GPLv2+.</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

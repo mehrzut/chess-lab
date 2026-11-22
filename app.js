@@ -9,7 +9,7 @@ const SF_URLS = [
   'https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js',
 ];
 const state = {
-  user: '', games: [], filter: { color: 'all', tc: 'all', group: 'family', opening: null },
+  user: '', games: [], filter: { color: 'all', tc: 'all', group: 'family', opening: null, period: 'all' }, list: { sort: 'new', result: 'all', q: '', analyzed: false },
   sortKey: 'games', sortDir: -1, sel: null, ply: 0, flip: false, review: null, token: 0, side: 'moves', timer: null, busy: null,
 };
 
@@ -129,11 +129,21 @@ function endgameInfo(pgn) {
 function phaseOf(fens, i) { if (i < 20) return 'opening'; return isEndgame(fens[i]) ? 'endgame' : 'middlegame'; }
 
 function show() {
+  annotate(state.games);
   $('#empty').hidden = true; $('#tabs').hidden = false;
   const tcs = ['all', ...new Set(state.games.map((g) => g.tc))];
   $('#fTc').innerHTML = tcs.map((t, i) => `<button data-v="${t}" class="${i ? '' : 'on'}">${t === 'all' ? 'All time controls' : t[0].toUpperCase() + t.slice(1)}</button>`).join('');
-  state.filter = { color: 'all', tc: 'all', group: 'family', opening: null };
+  state.filter = { color: 'all', tc: 'all', group: 'family', opening: null, period: 'all' };
+  ['#fColor', '#fPeriod', '#fGroup'].forEach((id) => $(id).querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === 0)));
   tab('stats'); renderList();
+}
+/* adds rating change (against your previous game in the same time control) and game length */
+function annotate(gs) {
+  const last = {};
+  gs.forEach((g) => {
+    g.delta = last[g.tc] != null ? g.rating - last[g.tc] : null; last[g.tc] = g.rating;
+    if (g.moveCount == null) { const n = [...g.pgn.matchAll(/(\d+)\.\s/g)].map((m) => +m[1]); g.moveCount = n.length ? Math.max(...n) : 0; }
+  });
 }
 
 /* ---------- tabs and filters ---------- */
@@ -151,10 +161,11 @@ function seg(id, key) {
     renderStats(); renderList();
   });
 }
-seg('#fColor', 'color'); seg('#fTc', 'tc'); seg('#fGroup', 'group');
+seg('#fColor', 'color'); seg('#fTc', 'tc'); seg('#fGroup', 'group'); seg('#fPeriod', 'period');
 function filtered() {
   const f = state.filter;
-  return state.games.filter((g) => (f.color === 'all' || g.color === f.color) && (f.tc === 'all' || g.tc === f.tc));
+  const cutoff = f.period === 'all' ? 0 : Date.now() / 1000 - +f.period * 86400;
+  return state.games.filter((g) => (f.color === 'all' || g.color === f.color) && (f.tc === 'all' || g.tc === f.tc) && g.end >= cutoff);
 }
 
 /* ---------- stats ---------- */
@@ -204,12 +215,31 @@ function renderStats() {
   const buckets = [['Opponent 50+ points higher', (g) => g.oppRating - g.rating >= 50], ['Within 50 points', (g) => Math.abs(g.oppRating - g.rating) < 50], ['Opponent 50+ points lower', (g) => g.rating - g.oppRating >= 50]];
   $('#vsStrength').innerHTML = buckets.map(([l, f]) => rowBlock(l, gs.filter(f))).join('');
 
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']; const wd = groupBy(gs, (g) => (new Date(g.end * 1000).getDay() + 6) % 7);
-  const mx = Math.max(1, ...[...wd.values()].map((x) => x.length));
-  $('#weekdays').innerHTML = days.map((d, i) => {
-    const x = wd.get(i) || []; const w = wdl(x); const h = (x.length / mx) * 100;
-    return `<div class="wd"><div class="col" title="${x.length} games"><div style="height:${h}%;display:flex;flex-direction:column-reverse"><i style="flex:${w.w}"></i><i style="flex:${w.d}"></i><i style="flex:${w.l}"></i></div></div><b>${d}</b><br><span class="muted" style="margin:0">${x.length ? pct(w.w, x.length) + '%' : '-'}</span></div>`;
-  }).join('');
+  const colChart = (el, labels, keyFn) => {
+    const m = groupBy(gs, keyFn); const mx = Math.max(1, ...[...m.values()].map((x) => x.length));
+    $(el).innerHTML = labels.map((d, i) => {
+      const x = m.get(i) || []; const w = wdl(x); const hgt = (x.length / mx) * 100;
+      return `<div class="wd"><div class="col" title="${x.length} games"><div style="height:${hgt}%;display:flex;flex-direction:column-reverse"><i style="flex:${w.w}"></i><i style="flex:${w.d}"></i><i style="flex:${w.l}"></i></div></div><b>${d}</b><br><span class="muted" style="margin:0">${x.length ? pct(w.w, x.length) + '%' : '-'}</span></div>`;
+    }).join('');
+  };
+  colChart('#weekdays', ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], (g) => (new Date(g.end * 1000).getDay() + 6) % 7);
+  colChart('#hours', ['0-3', '3-6', '6-9', '9-12', '12-15', '15-18', '18-21', '21-24'], (g) => Math.floor(new Date(g.end * 1000).getHours() / 3));
+
+  // tilt: how you do right after a loss or a win (next game started within an hour)
+  const afterL = [], afterW = [];
+  for (let i = 1; i < gs.length; i++) { if (gs[i].end - gs[i - 1].end <= 3600) (gs[i - 1].res === 'L' ? afterL : gs[i - 1].res === 'W' ? afterW : []).push(gs[i]); }
+  let bestRun = 0, curRun = 0, worstRun = 0, curLoss = 0;
+  gs.forEach((g) => { curRun = g.res === 'W' ? curRun + 1 : 0; bestRun = Math.max(bestRun, curRun); curLoss = g.res === 'L' ? curLoss + 1 : 0; worstRun = Math.max(worstRun, curLoss); });
+  const overall = pct(s.w, gs.length), wL = pct(wdl(afterL).w, afterL.length), wW = pct(wdl(afterW).w, afterW.length);
+  $('#tilt').innerHTML = gs.length < 10 ? '<p class="muted" style="margin:0">Play at least 10 games in this selection to see streak and tilt numbers.</p>' : `
+    <div class="tiles">
+      <div class="tile"><b>${afterL.length ? wL + '%' : '-'}</b><span>win rate right after a loss (${afterL.length} games)</span></div>
+      <div class="tile"><b>${afterW.length ? wW + '%' : '-'}</b><span>win rate right after a win (${afterW.length} games)</span></div>
+      <div class="tile"><b>${overall}%</b><span>win rate overall</span></div>
+      <div class="tile"><b>${bestRun}</b><span>longest win streak</span></div>
+      <div class="tile"><b>${worstRun}</b><span>longest losing streak</span></div>
+    </div>
+    ${afterL.length >= 8 && wL + 8 <= overall ? `<p class="callout" style="margin:0">You win ${overall - wL} points less often straight after a loss. A short break between games may help.</p>` : ''}`;
 
   const eg = gs.filter((g) => g.endgame); const ew = wdl(eg);
   const kinds = groupBy(eg, (g) => g.endKind);
@@ -256,17 +286,49 @@ function drawRating(gs) {
 }
 
 /* ---------- game list ---------- */
+const accMemo = new Map();
+function accOf(g) {
+  if (!accMemo.has(g.url)) { const x = store.get('anx:' + g.url); accMemo.set(g.url, x ? x.acc : null); }
+  return accMemo.get(g.url);
+}
+const SORTS = {
+  new: (a, b) => b.end - a.end, old: (a, b) => a.end - b.end,
+  oppHi: (a, b) => b.oppRating - a.oppRating, oppLo: (a, b) => a.oppRating - b.oppRating,
+  dBest: (a, b) => (b.delta ?? -1e9) - (a.delta ?? -1e9), dWorst: (a, b) => (a.delta ?? 1e9) - (b.delta ?? 1e9),
+  long: (a, b) => b.moveCount - a.moveCount, short: (a, b) => a.moveCount - b.moveCount,
+  accHi: (a, b) => (accOf(b) ?? -1) - (accOf(a) ?? -1), accLo: (a, b) => (accOf(a) ?? 101) - (accOf(b) ?? 101),
+};
 function listGames() {
-  const o = state.filter.opening; const k = state.filter.group;
-  return filtered().filter((g) => !o || g[k] === o).slice().reverse();
+  const o = state.filter.opening; const k = state.filter.group; const L = state.list;
+  return filtered().filter((g) => (!o || g[k] === o) && (L.result === 'all' || g.res === L.result) && (!L.analyzed || accOf(g) != null)
+    && (!L.q || g.oppName.toLowerCase().includes(L.q) || g.variation.toLowerCase().includes(L.q))).sort(SORTS[L.sort]);
 }
 function renderList() {
   const gs = listGames();
   $('#listNote').textContent = state.filter.opening ? `(${state.filter.opening})` : `(${gs.length})`;
-  $('#gameList').innerHTML = (state.filter.opening ? '<button class="g" data-clear="1">Show all openings</button>' : '') +
-    (gs.slice(0, 200).map((g, i) => `<button class="g" data-i="${i}"><span class="r ${g.res}">${g.res}</span>vs ${esc(g.oppName)} (${g.oppRating})<small>${new Date(g.end * 1000).toLocaleDateString()} · ${g.tc} · ${g.color} · ${esc(g.variation)}</small></button>`).join('')
-    || '<p class="muted">No games match these filters.</p>');
+  const row = (g, i) => {
+    const d = g.delta; const dl = d == null ? '' : `<span class="dl ${d > 0 ? 'up' : d < 0 ? 'down' : 'flat'}">${d > 0 ? '+' : ''}${d}</span>`;
+    const acc = accOf(g); const ac = acc != null ? ` · ${acc}% accuracy` : '';
+    return `<button class="g" data-i="${i}"><span class="r ${g.res}">${g.res}</span>vs ${esc(g.oppName)} (${g.oppRating})${dl}<small>${new Date(g.end * 1000).toLocaleDateString()} · ${g.tc} · ${g.color} · ${g.moveCount} moves${ac}<br>${esc(g.variation)}</small></button>`;
+  };
+  $('#gameList').innerHTML = (state.filter.opening ? '<button class="g" data-clear="1">Show all openings</button>' : '')
+    + (gs.slice(0, 200).map(row).join('') || '<p class="muted">No games match these filters.</p>')
+    + (gs.length > 200 ? `<p class="muted">Showing 200 of ${gs.length}. Narrow the filters to see the rest.</p>` : '');
 }
+$('#lq').addEventListener('input', () => { state.list.q = $('#lq').value.trim().toLowerCase(); renderList(); });
+$('#lsort').addEventListener('change', () => { state.list.sort = $('#lsort').value; renderList(); });
+$('#lan').addEventListener('change', () => { state.list.analyzed = $('#lan').checked; renderList(); });
+$('#lres').addEventListener('click', (e) => {
+  if (!e.target.dataset.v) return; state.list.result = e.target.dataset.v;
+  $('#lres').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === e.target)); renderList();
+});
+$('#csvBtn').addEventListener('click', () => {
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const head = ['date', 'time_class', 'color', 'opponent', 'opponent_rating', 'my_rating', 'rating_change', 'result', 'ended_by', 'moves', 'opening', 'eco', 'accuracy', 'url'];
+  const lines = listGames().map((g) => [new Date(g.end * 1000).toISOString(), g.tc, g.color, g.oppName, g.oppRating, g.rating, g.delta, g.res, g.how, g.moveCount, g.variation, g.eco, accOf(g), g.url].map(q).join(','));
+  const blob = new Blob([[head.join(','), ...lines].join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${state.user}-games.csv`; document.body.appendChild(a); a.click(); a.remove();
+});
 $('#gameList').addEventListener('click', (e) => {
   const b = e.target.closest('.g'); if (!b) return;
   if (b.dataset.clear) { state.filter.opening = null; return renderList(); }
@@ -369,7 +431,8 @@ function renderMoves() {
     h += `<button class="mv${state.ply === i + 1 ? ' on' : ''}" data-p="${i + 1}"><span>${m.san}${dot}</span>${t}</button>`;
   });
   const box = $('#sMoves'); const keep = box.scrollTop; box.innerHTML = h;
-  const on = box.querySelector('.mv.on'); if (on) on.scrollIntoView({ block: 'nearest' }); else box.scrollTop = keep;
+  const on = box.querySelector('.mv.on');
+  if (on) { const t = on.offsetTop; if (t < box.scrollTop || t + on.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = Math.max(0, t - box.clientHeight / 2); } else box.scrollTop = keep;
 }
 $('#sMoves').addEventListener('click', (e) => { const b = e.target.closest('.mv'); if (b) go(+b.dataset.p); });
 function go(p) { if (!state.sel) return; state.ply = Math.max(0, Math.min(state.sel.moves.length, p)); renderGame(); }
@@ -396,8 +459,9 @@ $('#sideTabs').addEventListener('click', (e) => {
 });
 function renderSide() {
   document.querySelectorAll('#sideTabs button').forEach((b) => b.classList.toggle('on', b.dataset.s === state.side));
-  $('#sMoves').hidden = state.side !== 'moves'; $('#sSummary').hidden = state.side !== 'summary'; $('#sMoments').hidden = state.side !== 'moments';
+  $('#sMoves').hidden = state.side !== 'moves'; $('#sSummary').hidden = state.side !== 'summary'; $('#sMoments').hidden = state.side !== 'moments'; $('#sNotes').hidden = state.side !== 'notes';
   const rv = state.review; const s = state.sel;
+  const nb = $('#notesBox'); nb.disabled = !s; if (document.activeElement !== nb) nb.value = s ? (store.get('note:' + s.g.url) || '') : '';
   if (!s) { $('#sSummary').innerHTML = $('#sMoments').innerHTML = '<p class="pending">Pick a game first.</p>'; return; }
   if (!rv) { $('#sSummary').innerHTML = $('#sMoments').innerHTML = '<p class="pending">Press Analyze with Stockfish to fill this in.</p>'; return; }
   const me = s.g.color === 'white' ? 'w' : 'b';
@@ -540,21 +604,30 @@ $('#bAnalyze').addEventListener('click', async () => {
   } catch (err) { $('#coach').textContent = err.message; }
   state.busy = null; $('#bAnalyze').disabled = false;
   if (!evals) { $('#progress').hidden = true; return; }
-  store.set('an2:' + s.g.url, { evals, depth });
-  state.review = buildReview(s, evals, depth);
+  state.review = saveAnalysis(s, evals, depth);
   $('#progress').hidden = true;
-  state.side = 'summary'; renderSide(); renderGame(); renderInsights();
+  state.side = 'summary'; renderSide(); renderGame(); renderInsights(); renderList();
 });
 
 /* ---------- batch insights: analyse recent games, then summarise tactics, phases and openings ---------- */
 const ins = { running: false, token: 0 };
+const rvMemo = new Map();
+function saveAnalysis(s, evals, depth) {
+  store.set('an2:' + s.g.url, { evals, depth }); rvMemo.clear();
+  const rv = buildReview(s, evals, depth); const c = s.g.color === 'white' ? 'w' : 'b';
+  store.set('anx:' + s.g.url, { acc: rv.acc[c], blun: rv.counts[c].blun }); accMemo.delete(s.g.url);
+  return rv;
+}
+function reviewFor(g) {
+  const c = store.get('an2:' + g.url); if (!c || !c.evals) return null;
+  const key = g.url + ':' + c.evals.length + ':' + c.depth; if (rvMemo.has(key)) return rvMemo.get(key);
+  const s = prepare(g); if (!s.moves.length || c.evals.length !== s.fens.length) return null;
+  const rv = buildReview(s, c.evals, c.depth); rvMemo.set(key, rv); return rv;
+}
 function recentGames(n) { return state.games.slice().reverse().slice(0, n); }
 function insightResults(n) {
   const out = [];
-  recentGames(n).forEach((g) => {
-    const c = store.get('an2:' + g.url); if (!c || !c.evals) return;
-    const s = prepare(g); if (s.moves.length && c.evals.length === s.fens.length) out.push({ g, rv: buildReview(s, c.evals, c.depth) });
-  });
+  recentGames(n).forEach((g) => { const rv = reviewFor(g); if (rv) out.push({ g, rv }); });
   return out.reverse();
 }
 $('#batchBtn').addEventListener('click', async () => {
@@ -568,14 +641,14 @@ $('#batchBtn').addEventListener('click', async () => {
       if (token !== ins.token) break;
       const s = prepare(g); done++;
       const cached = store.get('an2:' + g.url);
-      if (cached && cached.evals && cached.evals.length === s.fens.length) { renderInsights(); continue; }
+      if (cached && cached.evals && cached.evals.length === s.fens.length) { if (!store.get('anx:' + g.url)) saveAnalysis(s, cached.evals, cached.depth); renderInsights(); continue; }
       if (!s.moves.length) continue;
       $('#batchMsg').textContent = `Analyzing game ${done} of ${list.length}...`;
       const evals = await runEvals(s, 10, () => token !== ins.token, (i, m) => {
         $('#batchBar span').style.width = (((done - 1) + i / m) / list.length) * 100 + '%';
       });
       if (!evals) break;
-      store.set('an2:' + g.url, { evals, depth: 10 }); renderInsights();
+      saveAnalysis(s, evals, 10); renderInsights(); renderList();
     }
   } catch (err) { $('#batchMsg').textContent = err.message; }
   ins.running = false; state.busy = null; $('#batchBtn').textContent = 'Analyze recent games'; $('#batchBar').hidden = true; $('#bAnalyze').disabled = false;
@@ -595,6 +668,8 @@ function renderInsights() {
   const byOpen = groupBy(mine, (m) => m.g.family);
   const orows = [...byOpen].filter(([, x]) => x.length >= 2).map(([k, x]) => [k, x.length, avg(x.map((m) => m.acc))]).sort((a, b) => a[2] - b[2]);
   const hh = (v) => Math.max(6, v);
+  const worst = mine.slice().sort((a, b) => a.acc - b.acc).slice(0, 5);
+  const reviewHtml = `<h2 style="margin-top:1rem">Games to review first <span class="muted">Lowest accuracy among the analyzed games</span></h2>${worst.map((m) => `<button class="moment" data-url="${esc(m.g.url)}"><b>${m.acc}%</b> accuracy vs ${esc(m.g.oppName)} (${m.g.oppRating})<small>${new Date(m.g.end * 1000).toLocaleDateString()} · ${m.g.res === 'W' ? 'won' : m.g.res === 'L' ? 'lost' : 'drawn'} · ${m.counts.blun} blunders, ${m.counts.mist} mistakes · ${esc(m.g.variation)}</small></button>`).join('')}`;
   box.innerHTML = `
     <div class="tiles">${tiles.map(([b, t]) => `<div class="tile"><b>${b}</b><span>${t}</span></div>`).join('')}</div>
     <div class="grid2">
@@ -602,9 +677,14 @@ function renderInsights() {
         ${weakest ? `<p class="muted" style="margin:.4rem 0 0">Your weakest phase is the ${weakest[0]}. Review the games where your ${weakest[0]} accuracy dropped.</p>` : ''}</div>
       <div><h2>Accuracy, oldest to newest game</h2><div class="trend">${mine.map((m) => `<i style="height:${hh(m.acc)}%" class="${m.g.res}" title="${new Date(m.g.end * 1000).toLocaleDateString()} vs ${esc(m.g.oppName)}: ${m.acc}% (${m.g.res === 'W' ? 'won' : m.g.res === 'L' ? 'lost' : 'drawn'})"></i>`).join('')}</div></div>
     </div>
+    ${reviewHtml}
     ${orows.length ? `<h2 style="margin-top:1rem">Accuracy by opening <span class="muted">Openings with at least 2 analyzed games, weakest first</span></h2><div class="scroll"><table><thead><tr><th>Opening</th><th>Games</th><th>Accuracy</th></tr></thead><tbody>${orows.slice(0, 8).map(([k, c, a]) => `<tr><td class="name">${esc(k)}</td><td>${c}</td><td>${a}%</td></tr>`).join('')}</tbody></table></div>` : ''}`;
 }
 $('#batchN').addEventListener('change', renderInsights);
+$('#insights').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-url]'); if (!b) return;
+  const g = state.games.find((x) => x.url === b.dataset.url); if (g) { openGame(g); tab('review'); }
+});
 
 function evText(cp) { return Math.abs(cp) >= 9000 ? (cp > 0 ? 'M' : '-M') : (cp > 0 ? '+' : '') + (cp / 100).toFixed(1); }
 function renderEval() {
@@ -658,3 +738,5 @@ window.addEventListener('resize', () => { if (!$('#stats').hidden) renderStats()
     state.user = user; state.games = cached.games; setStatus(`${cached.games.length} saved games for ${user}. Press Import games to refresh.`); show();
   } else importGames(user, +$('#months').value);
 })();
+
+$('#notesBox').addEventListener('input', () => { if (state.sel) store.set('note:' + state.sel.g.url, $('#notesBox').value); });

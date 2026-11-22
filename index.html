@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 <header class="top">
@@ -48,6 +48,9 @@
         <button data-v="all" class="on">Both colors</button><button data-v="white">White</button><button data-v="black">Black</button>
       </div>
       <div class="seg" id="fTc" role="group" aria-label="Time control"></div>
+      <div class="seg" id="fPeriod" role="group" aria-label="Period">
+        <button data-v="all" class="on">All time</button><button data-v="30">30 days</button><button data-v="90">90 days</button><button data-v="365">1 year</button>
+      </div>
       <div class="seg" id="fGroup" role="group" aria-label="Group openings by">
         <button data-v="family" class="on">Opening family</button><button data-v="variation">Variation</button>
       </div>
@@ -74,7 +77,11 @@
       <div class="panel"><h2>How your games end</h2><div id="endings"></div></div>
       <div class="panel"><h2>Against stronger and weaker players</h2><div id="vsStrength"></div></div>
     </div>
-    <div class="panel"><h2>Results by weekday</h2><div id="weekdays" class="weekdays"></div></div>
+    <div class="grid2">
+      <div class="panel"><h2>Results by weekday</h2><div id="weekdays" class="weekdays"></div></div>
+      <div class="panel"><h2>Results by time of day <span class="muted">Your local time</span></h2><div id="hours" class="weekdays hours"></div></div>
+    </div>
+    <div class="panel"><h2>Streaks and tilt</h2><div id="tilt"></div></div>
     <div class="panel">
       <h2>Openings you played <span class="muted">Click a row to review those games. Click a heading to sort.</span></h2>
       <div class="scroll"><table id="openTable"></table></div>
@@ -89,6 +96,23 @@
     <div class="reviewLayout">
       <aside class="panel gameList">
         <h2>Games <span id="listNote" class="muted"></span></h2>
+        <div class="listCtl">
+          <label class="sr" for="lq">Search games</label>
+          <input id="lq" type="text" placeholder="Search opponent or opening" autocomplete="off">
+          <label class="sr" for="lsort">Sort games</label>
+          <select id="lsort">
+            <option value="new">Newest first</option><option value="old">Oldest first</option>
+            <option value="oppHi">Strongest opponent</option><option value="oppLo">Weakest opponent</option>
+            <option value="dBest">Biggest rating gain</option><option value="dWorst">Biggest rating loss</option>
+            <option value="long">Longest game</option><option value="short">Shortest game</option>
+            <option value="accHi">Highest accuracy</option><option value="accLo">Lowest accuracy</option>
+          </select>
+          <div class="seg" id="lres" role="group" aria-label="Result">
+            <button data-v="all" class="on">All</button><button data-v="W">Won</button><button data-v="D">Drawn</button><button data-v="L">Lost</button>
+          </div>
+          <label class="chk" for="lan"><input id="lan" type="checkbox"> Analyzed games only</label>
+          <button id="csvBtn">Export these games (CSV)</button>
+        </div>
         <div id="gameList"></div>
       </aside>
 
@@ -129,10 +153,12 @@
             <button data-s="moves" class="on" role="tab">Moves</button>
             <button data-s="summary" role="tab">Summary</button>
             <button data-s="moments" role="tab">Key moments</button>
+            <button data-s="notes" role="tab">Notes</button>
           </div>
           <div id="sMoves" class="moves"></div>
           <div id="sSummary" hidden></div>
           <div id="sMoments" hidden></div>
+          <div id="sNotes" hidden><label for="notesBox" class="sr">Notes for this game</label><textarea id="notesBox" class="note" placeholder="Write what you learned from this game. Notes stay in this browser."></textarea></div>
         </div>
         <p class="hint">Shortcuts: left and right arrows step through moves, space plays, F flips the board.</p>
       </aside>
@@ -143,6 +169,6 @@
 <footer class="foot">Chess Lab is not affiliated with chess.com. Data comes from the chess.com public API. Analysis by Stockfish. Pieces: cburnett set from lichess.org, GPLv2+.</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

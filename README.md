@@ -6,7 +6,7 @@ Opening stats, endgame stats and Stockfish game review for your chess.com games.
 
     python3 -m http.server 8000
 
-Open http://localhost:8000, enter your chess.com username and press Import games. You can also open `http://localhost:8000/?u=mehrzut` to import straight away.
+Open http://localhost:8000, enter your chess.com username and press Import games. The username is remembered in your browser, so next time the app opens with your games already loaded. A link like `http://localhost:8000/?u=SOMEONE` imports that username straight away.
 
 ## Put it on the internet
 
@@ -32,7 +32,19 @@ Open http://localhost:8000, enter your chess.com username and press Import games
 3. Leave the build command empty and set the build output directory to `/` (or leave it blank). Deploy.
 4. The site is live at `https://chess-lab.pages.dev` (the name follows your project name).
 
-To skip Git entirely, run `npx wrangler pages deploy . --project-name chess-lab` in this folder after `npx wrangler login`.
+To skip Git entirely, run this inside the chess-lab folder (the `.` is the folder to upload, and wrangler fails without it):
+
+    npx wrangler login
+    npx wrangler pages deploy . --project-name chess-lab
+
+The first deploy asks whether to create the project. Choose production branch `main` if it asks.
+
+## What it does
+
+- **Stats:** filter by color, time control and period (30 days, 90 days, 1 year). See openings with win and score rates, best and worst openings, how games end, results against stronger and weaker players, weekday and time-of-day results, endgame types, and streak and tilt numbers.
+- **Game list:** search by opponent or opening, filter by result, show analyzed games only, sort by date, opponent strength, rating change, game length or accuracy, and export the list as CSV. Each game shows its rating change.
+- **Game review:** board with move-quality badges and engine arrows, evaluation graph, accuracy by side and phase, key moments, time per move and a notes tab for each game.
+- **Play insights:** analyze your last 10, 20 or 40 games to get blunders and mistakes per game, accuracy by phase and opening, and a list of games to review first.
 
 ## How it works
 

@@ -10,7 +10,7 @@ const SF_URLS = [
 ];
 const state = {
   user: '', games: [], filter: { color: 'all', tc: 'all', group: 'family', opening: null },
-  sortKey: 'games', sortDir: -1, sel: null, ply: 0, flip: false, review: null, token: 0, side: 'moves', timer: null,
+  sortKey: 'games', sortDir: -1, sel: null, ply: 0, flip: false, review: null, token: 0, side: 'moves', timer: null, busy: null,
 };
 
 /* ---------- small storage helpers (all wrapped: storage can be blocked) ---------- */
@@ -56,6 +56,7 @@ async function importGames(user, months) {
     const games = [...have.values()].sort((a, b) => a.end - b.end);
     store.set('games:' + user, { games, months: list });
     store.set('user', user);
+    if (state.user !== user) { state.sel = null; state.review = null; $('#gameMeta').innerHTML = '<span class="muted">Pick a game from the list.</span>'; }
     state.user = user; state.games = games;
     setStatus(`${games.length} games for ${user}`);
     show();
@@ -215,7 +216,7 @@ function renderStats() {
   const cap = gs.length ? `${eg.length} of ${gs.length} games (${pct(eg.length, gs.length)}%) reached an endgame, with ${pct(ew.w, eg.length)}% wins there.` : '';
   $('#endTable').innerHTML = `<caption class="muted" style="text-align:left;padding-bottom:.5rem;margin:0">${cap}</caption><thead><tr><th>Endgame type</th><th>Games</th><th>Win %</th><th>Results</th></tr></thead><tbody>${
     [...kinds].sort((a, b) => b[1].length - a[1].length).map(([k, x]) => { const w = wdl(x); return `<tr><td>${k}</td><td>${x.length}</td><td>${pct(w.w, x.length)}%</td><td>${bar(w, x.length)}</td></tr>`; }).join('')}</tbody>`;
-  drawRating(gs);
+  drawRating(gs); renderInsights();
 }
 function pickOpening(name) { state.filter.opening = name; renderList(); tab('review'); }
 $('#openTable').addEventListener('click', (e) => {
@@ -277,8 +278,7 @@ $('#gameList').addEventListener('click', (e) => {
 function parseClocks(pgn) {
   return [...pgn.matchAll(/\[%clk (\d+):(\d+):(\d+(?:\.\d+)?)\]/g)].map((m) => +m[1] * 3600 + +m[2] * 60 + +m[3]);
 }
-function openGame(g) {
-  state.token++; stopPlay();
+function prepare(g) {
   const ch = new Chess(); ch.load_pgn(g.pgn);
   const moves = ch.history({ verbose: true });
   const rep = new Chess(); const fens = [rep.fen()];
@@ -287,11 +287,15 @@ function openGame(g) {
   const inc = +(String(g.tcontrol || '').split('+')[1] || 0);
   const base = +String(g.tcontrol || '').split('+')[0].split('/').pop() || null;
   const spent = moves.map((m, i) => { const prev = i >= 2 ? clocks[i - 2] : base; return clocks[i] != null && prev != null ? Math.max(0, prev - clocks[i] + inc) : null; });
-  state.sel = { g, moves, fens, clocks, spent, base };
+  return { g, moves, fens, clocks, spent, base };
+}
+function openGame(g) {
+  state.token++; stopPlay();
+  state.sel = prepare(g);
   state.ply = 0; state.flip = g.color === 'black'; state.review = null;
-  $('#progress').hidden = true; $('#bAnalyze').disabled = false;
-  const cached = store.get('an:' + g.url);
-  if (cached && cached.evals) state.review = buildReview(state.sel, cached.evals);
+  $('#progress').hidden = true; $('#bAnalyze').disabled = !!state.busy;
+  const cached = store.get('an2:' + g.url);
+  if (cached && cached.evals) state.review = buildReview(state.sel, cached.evals, cached.depth);
   renderMeta(); renderGame(); renderSide();
 }
 function renderMeta() {
@@ -322,7 +326,7 @@ function renderGame() {
     const dark = (c.r + c.f) % 2 === 1; const n = 'abcdefgh'[c.f] + (8 - c.r);
     const hl = last && (last.from === n || last.to === n) ? ' hl' : '';
     const pc = c.p ? `<img alt="" draggable="false" src="${PIECE_URL}${c.p === c.p.toUpperCase() ? 'w' : 'b'}${c.p.toUpperCase()}.svg">` : '';
-    const col = idx % 8 === 7 ? `<span class="co f">${'abcdefgh'[c.f]}</span>` : '';
+    const col = idx >= 56 ? `<span class="co f">${'abcdefgh'[c.f]}</span>` : '';
     const rk = idx % 8 === 0 ? `<span class="co r">${8 - c.r}</span>` : '';
     const mk = cl && last && last.to === n && cl.sym ? `<span class="mk k-${cl.t}">${cl.sym}</span>` : '';
     return `<div class="sq ${dark ? 'd' : 'l'}${hl}">${rk}${col}${pc}${mk}</div>`;
@@ -431,10 +435,29 @@ function getEngine() {
     const eng = { w, handler: null };
     w.onmessage = (e) => { const l = typeof e.data === 'string' ? e.data : ''; if (eng.handler) eng.handler(l); };
     await new Promise((res) => { eng.handler = (l) => { if (l.startsWith('uciok')) res(); }; w.postMessage('uci'); });
+    // Stockfish 10 defaults to Contempt 24, which inflates the score of the side to move
+    // (the start position reads about +1.2). Zero it so evaluations are neutral.
+    w.postMessage('setoption name Contempt value 0');
+    await engineReady(eng);
     return eng;
   })();
   enginePromise.catch(() => { enginePromise = null; });
   return enginePromise;
+}
+function engineReady(eng) {
+  return new Promise((res) => { eng.handler = (l) => { if (l === 'readyok') { eng.handler = null; res(); } }; eng.w.postMessage('isready'); });
+}
+/* Evaluates every position of a prepared game. Returns null if cancelled(). */
+async function runEvals(s, depth, cancelled, onStep) {
+  const eng = await getEngine();
+  eng.w.postMessage('ucinewgame'); await engineReady(eng);
+  const evals = [];
+  for (let i = 0; i < s.fens.length; i++) {
+    if (cancelled()) return null;
+    evals.push(await evalFen(eng, s.fens[i], depth));
+    if (onStep) onStep(i + 1, s.fens.length);
+  }
+  return evals;
 }
 function evalFen(eng, fen, depth) {
   const ch = new Chess(fen); const turn = fen.split(' ')[1]; const sgn = turn === 'w' ? 1 : -1;
@@ -466,7 +489,9 @@ function isSacrifice(fen, mv) {
   return VAL[mv.piece] - gain >= 2 && low < VAL[mv.piece];
 }
 const winPct = (cp) => 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * Math.max(-1500, Math.min(1500, cp)))) - 1);
-const CLS = [[2, 'best', '', 'Best'], [5, 'good', '', 'Good'], [10, 'inacc', '?!', 'Inaccuracy'], [20, 'mist', '?', 'Mistake'], [101, 'blun', '??', 'Blunder']];
+/* Thresholds are drops in win probability for the side that moved, in percentage points.
+   They follow the scale Lichess uses: 10 inaccuracy, 20 mistake, 30 blunder. */
+const CLS = [[2, 'best', '', 'Best'], [10, 'good', '', 'Good'], [20, 'inacc', '?!', 'Inaccuracy'], [30, 'mist', '?', 'Mistake'], [101, 'blun', '??', 'Blunder']];
 
 /* evals is [{cp, best}] for every position; everything else is derived from it, so it can be cached */
 function buildReview(s, evals, depth) {
@@ -477,12 +502,12 @@ function buildReview(s, evals, depth) {
     const mover = m.color === 'w' ? 1 : -1;
     const before = winPct(evals[i].cp * mover), after = winPct(evals[i + 1].cp * mover);
     const drop = Math.max(0, before - after);
-    let c = CLS.find((x) => drop <= x[0]);
-    const a = Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * drop) - 3.1669));
+    const bu = evals[i].best; const played = m.from + m.to + (m.promotion || '');
+    let c = bu && played === bu ? CLS[0] : CLS.find((x) => drop <= x[0]);
+    const a = Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * (bu && played === bu ? 0 : drop)) - 3.1669));
     acc[m.color].push(a);
     const ph = phaseOf(s.fens, i); (phaseAcc[m.color][ph] = phaseAcc[m.color][ph] || []).push(a);
     let bestSan = null, bestTactical = false;
-    const bu = evals[i].best;
     if (bu && bu !== '(none)') {
       const t = new Chess(s.fens[i]);
       const mv = t.move({ from: bu.slice(0, 2), to: bu.slice(2, 4), promotion: bu[4] });
@@ -490,7 +515,7 @@ function buildReview(s, evals, depth) {
     }
     const brilliant = drop <= 2 && before < 90 && after >= 40 && isSacrifice(s.fens[i], m);
     if (brilliant) c = [0, 'brill', '!!', 'Brilliant'];
-    const miss = !brilliant && drop >= 15 && bestTactical; if (miss) missed[m.color]++;
+    const miss = !brilliant && drop >= 20 && bestTactical; if (miss) missed[m.color]++;
     counts[m.color][c[1]]++;
     cls.push({ t: c[1], sym: c[2], label: c[3], drop, bestSan, missed: miss });
   });
@@ -502,23 +527,84 @@ function buildReview(s, evals, depth) {
 
 $('#bAnalyze').addEventListener('click', async () => {
   const s = state.sel; if (!s) return;
+  if (state.busy) { $('#coach').textContent = 'The engine is busy with the batch analysis. Stop it first, or wait for it to finish.'; return; }
   stopPlay();
   const token = ++state.token; const depth = +$('#depth').value;
-  $('#bAnalyze').disabled = true; $('#progress').hidden = false; $('#progressBar').style.width = '0';
+  state.busy = 'single'; $('#bAnalyze').disabled = true; $('#progress').hidden = false; $('#progressBar').style.width = '0';
   $('#coach').textContent = 'Loading Stockfish...';
-  let eng; try { eng = await getEngine(); } catch (err) { $('#coach').textContent = err.message; $('#bAnalyze').disabled = false; return; }
-  const evals = [];
-  for (let i = 0; i < s.fens.length; i++) {
-    if (token !== state.token) return;
-    evals.push(await evalFen(eng, s.fens[i], depth));
-    $('#progressBar').style.width = ((i + 1) / s.fens.length) * 100 + '%';
-    $('#coach').textContent = `Analyzing position ${i + 1} of ${s.fens.length}`;
-  }
-  store.set('an:' + s.g.url, { evals, depth });
+  let evals = null;
+  try {
+    evals = await runEvals(s, depth, () => token !== state.token, (i, n) => {
+      $('#progressBar').style.width = (i / n) * 100 + '%'; $('#coach').textContent = `Analyzing position ${i} of ${n}`;
+    });
+  } catch (err) { $('#coach').textContent = err.message; }
+  state.busy = null; $('#bAnalyze').disabled = false;
+  if (!evals) { $('#progress').hidden = true; return; }
+  store.set('an2:' + s.g.url, { evals, depth });
   state.review = buildReview(s, evals, depth);
-  $('#progress').hidden = true; $('#bAnalyze').disabled = false;
-  state.side = 'summary'; renderSide(); renderGame();
+  $('#progress').hidden = true;
+  state.side = 'summary'; renderSide(); renderGame(); renderInsights();
 });
+
+/* ---------- batch insights: analyse recent games, then summarise tactics, phases and openings ---------- */
+const ins = { running: false, token: 0 };
+function recentGames(n) { return state.games.slice().reverse().slice(0, n); }
+function insightResults(n) {
+  const out = [];
+  recentGames(n).forEach((g) => {
+    const c = store.get('an2:' + g.url); if (!c || !c.evals) return;
+    const s = prepare(g); if (s.moves.length && c.evals.length === s.fens.length) out.push({ g, rv: buildReview(s, c.evals, c.depth) });
+  });
+  return out.reverse();
+}
+$('#batchBtn').addEventListener('click', async () => {
+  if (ins.running) { ins.token++; return; }
+  if (state.busy) { $('#batchMsg').textContent = 'The engine is busy with a single game. Try again when it finishes.'; return; }
+  const n = +$('#batchN').value; const token = ++ins.token;
+  ins.running = true; state.busy = 'batch'; $('#bAnalyze').disabled = true; $('#batchBtn').textContent = 'Stop'; $('#batchBar').hidden = false;
+  const list = recentGames(n); let done = 0;
+  try {
+    for (const g of list) {
+      if (token !== ins.token) break;
+      const s = prepare(g); done++;
+      const cached = store.get('an2:' + g.url);
+      if (cached && cached.evals && cached.evals.length === s.fens.length) { renderInsights(); continue; }
+      if (!s.moves.length) continue;
+      $('#batchMsg').textContent = `Analyzing game ${done} of ${list.length}...`;
+      const evals = await runEvals(s, 10, () => token !== ins.token, (i, m) => {
+        $('#batchBar span').style.width = (((done - 1) + i / m) / list.length) * 100 + '%';
+      });
+      if (!evals) break;
+      store.set('an2:' + g.url, { evals, depth: 10 }); renderInsights();
+    }
+  } catch (err) { $('#batchMsg').textContent = err.message; }
+  ins.running = false; state.busy = null; $('#batchBtn').textContent = 'Analyze recent games'; $('#batchBar').hidden = true; $('#bAnalyze').disabled = false;
+  renderInsights();
+});
+function renderInsights() {
+  const n = +$('#batchN').value; const res = insightResults(n); const box = $('#insights');
+  $('#batchMsg').textContent = ins.running ? $('#batchMsg').textContent : `${res.length} of your last ${Math.min(n, state.games.length)} games are analyzed.`;
+  if (!res.length) { box.innerHTML = '<p class="muted" style="margin:0">Analyze your recent games to see your accuracy, tactics and weakest phase. Analysis runs on your device and takes about 15 to 30 seconds per game.</p>'; return; }
+  const mine = res.map(({ g, rv }) => { const c = g.color === 'white' ? 'w' : 'b'; return { g, acc: rv.acc[c], phase: rv.phase[c], counts: rv.counts[c], missed: rv.missed[c] }; });
+  const avg = (a) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null);
+  const sum = (k) => mine.reduce((a, m) => a + m.counts[k], 0); const per = (v) => (v / mine.length).toFixed(1);
+  const phases = ['opening', 'middlegame', 'endgame'].map((p) => [p, avg(mine.map((m) => m.phase[p]).filter((v) => v != null))]);
+  const known = phases.filter((p) => p[1] != null); const weakest = known.length ? known.reduce((a, b) => (b[1] < a[1] ? b : a)) : null;
+  const tiles = [[avg(mine.map((m) => m.acc)) + '%', 'average accuracy'], [per(sum('blun')), 'blunders per game'], [per(sum('mist')), 'mistakes per game'],
+    [per(sum('inacc')), 'inaccuracies per game'], [per(mine.reduce((a, m) => a + m.missed, 0)), 'missed tactics per game'], [sum('brill'), 'brilliant moves in total']];
+  const byOpen = groupBy(mine, (m) => m.g.family);
+  const orows = [...byOpen].filter(([, x]) => x.length >= 2).map(([k, x]) => [k, x.length, avg(x.map((m) => m.acc))]).sort((a, b) => a[2] - b[2]);
+  const hh = (v) => Math.max(6, v);
+  box.innerHTML = `
+    <div class="tiles">${tiles.map(([b, t]) => `<div class="tile"><b>${b}</b><span>${t}</span></div>`).join('')}</div>
+    <div class="grid2">
+      <div><h2>Accuracy by phase</h2>${phases.map(([p, v]) => `<div class="row"><div class="lab"><span>${p[0].toUpperCase() + p.slice(1)}</span><span class="muted">${v == null ? 'no data' : v + '%'}</span></div><div class="meter"><i style="width:${v || 0}%"></i></div></div>`).join('')}
+        ${weakest ? `<p class="muted" style="margin:.4rem 0 0">Your weakest phase is the ${weakest[0]}. Review the games where your ${weakest[0]} accuracy dropped.</p>` : ''}</div>
+      <div><h2>Accuracy, oldest to newest game</h2><div class="trend">${mine.map((m) => `<i style="height:${hh(m.acc)}%" class="${m.g.res}" title="${new Date(m.g.end * 1000).toLocaleDateString()} vs ${esc(m.g.oppName)}: ${m.acc}% (${m.g.res === 'W' ? 'won' : m.g.res === 'L' ? 'lost' : 'drawn'})"></i>`).join('')}</div></div>
+    </div>
+    ${orows.length ? `<h2 style="margin-top:1rem">Accuracy by opening <span class="muted">Openings with at least 2 analyzed games, weakest first</span></h2><div class="scroll"><table><thead><tr><th>Opening</th><th>Games</th><th>Accuracy</th></tr></thead><tbody>${orows.slice(0, 8).map(([k, c, a]) => `<tr><td class="name">${esc(k)}</td><td>${c}</td><td>${a}%</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+}
+$('#batchN').addEventListener('change', renderInsights);
 
 function evText(cp) { return Math.abs(cp) >= 9000 ? (cp > 0 ? 'M' : '-M') : (cp > 0 ? '+' : '') + (cp / 100).toFixed(1); }
 function renderEval() {
@@ -570,5 +656,5 @@ window.addEventListener('resize', () => { if (!$('#stats').hidden) renderStats()
   const cached = store.get('games:' + user);
   if (cached && cached.games && cached.games.length) {
     state.user = user; state.games = cached.games; setStatus(`${cached.games.length} saved games for ${user}. Press Import games to refresh.`); show();
-  } else if (q) importGames(user, +$('#months').value);
+  } else importGames(user, +$('#months').value);
 })();

@@ -15,7 +15,7 @@
   <div class="brand">Chess Lab</div>
   <form id="loadForm" class="load">
     <label for="user" class="sr">chess.com username</label>
-    <input id="user" value="mehrzut" autocomplete="off" spellcheck="false" placeholder="chess.com username">
+    <input id="user" autocomplete="username" spellcheck="false" placeholder="Your chess.com username" required>
     <label for="months" class="sr">Months to load</label>
     <select id="months">
       <option value="3">Last 3 months</option>
@@ -51,6 +51,19 @@
       <div class="seg" id="fGroup" role="group" aria-label="Group openings by">
         <button data-v="family" class="on">Opening family</button><button data-v="variation">Variation</button>
       </div>
+    </div>
+    <div class="panel">
+      <div class="insHead">
+        <h2>Play insights <span class="muted">Stockfish analysis of your recent games</span></h2>
+        <div class="insCtl">
+          <label for="batchN" class="sr">Number of games</label>
+          <select id="batchN"><option value="10">Last 10 games</option><option value="20" selected>Last 20 games</option><option value="40">Last 40 games</option></select>
+          <button id="batchBtn" class="primary">Analyze recent games</button>
+        </div>
+      </div>
+      <div id="batchBar" class="progress" hidden><span></span></div>
+      <p id="batchMsg" class="muted" style="margin:0 0 .8rem"></p>
+      <div id="insights"></div>
     </div>
     <div class="grid2">
       <div class="panel"><h2>Rating over time</h2><canvas id="ratingChart" height="230"></canvas></div>

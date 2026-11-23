@@ -5,7 +5,7 @@
   --bg: #edf0f4; --panel: #ffffff; --raise: #f5f7fa; --fg: #151d28; --muted: #5d6877; --line: #d9dfe7;
   --accent: #3454d1; --accent-fg: #ffffff; --accent-soft: #e4e9fb;
   --win: #2f9a62; --draw: #98a2b0; --loss: #d4483e;
-  --sq-l: #e6ecf1; --sq-d: #7f9bb3; --hl: rgba(236, 201, 62, .5);
+  --sq-l: #e6ecf1; --sq-d: #7f9bb3; --hl: rgba(236, 201, 62, .5); --co-l: #37495a; --co-d: #070c12;
   --brill: #17a99e; --best: #3d9f68; --good: #86b556; --inacc: #d9ac2f; --mist: #ec8a3a; --blun: #d4483e;
   --evalw: #f4f6f8; --evalb: #1d2632;
   --head: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
@@ -120,14 +120,15 @@ td.name { white-space: normal; min-width: 14rem; }
 .sq.l { background: var(--sq-l); } .sq.d { background: var(--sq-d); }
 .sq.hl::before { content: ""; position: absolute; inset: 0; background: var(--hl); }
 .sq img { position: absolute; inset: 3%; width: 94%; height: 94%; z-index: 1; user-select: none; -webkit-user-drag: none; pointer-events: none; }
-.sq .co { position: absolute; font-size: clamp(8px, 1.3vw, 11px); font-weight: 600; opacity: .85; z-index: 2; line-height: 1; pointer-events: none; }
-.sq.l .co { color: var(--sq-d); } .sq.d .co { color: var(--sq-l); }
+/* coordinates: dark labels on both square colors (4.5:1 or better in both themes) */
+.sq .co { position: absolute; font-size: clamp(10px, 1.4vw, 12px); font-weight: 700; z-index: 2; line-height: 1; pointer-events: none; }
+.sq.l .co { color: var(--co-l); } .sq.d .co { color: var(--co-d); }
 .sq .co.f { right: 3px; bottom: 1px; } .sq .co.r { left: 3px; top: 1px; }
 .sq .mk { position: absolute; top: -6%; right: -6%; z-index: 3; width: 36%; aspect-ratio: 1; border-radius: 50%; color: #fff; font: 700 clamp(9px, 1.7vw, 14px)/1 var(--head); display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,.45); }
 .arrows { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
-.evalBar { width: 22px; background: var(--evalb); border-radius: 6px; overflow: hidden; position: relative; }
+.evalBar { width: 30px; flex: none; background: var(--evalb); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; position: relative; }
 #evalFill { position: absolute; left: 0; right: 0; background: var(--evalw); height: 50%; transition: height .25s ease; }
-#evalNum { position: absolute; left: 0; right: 0; font-size: .6rem; font-weight: 700; text-align: center; padding: 2px 0; }
+#evalNum { position: absolute; left: 0; right: 0; font: 700 .72rem/1 var(--body); letter-spacing: -.02em; text-align: center; padding: 4px 0; z-index: 1; }
 .controls { display: flex; flex-wrap: wrap; gap: .4rem; margin: .7rem 0; align-items: center; }
 .controls .spacer { flex: 1; }
 .progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-bottom: .4rem; }

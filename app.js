@@ -756,13 +756,19 @@ $('#insights').addEventListener('click', (e) => {
 
 /* ---------- evaluation bar, coach and graph ---------- */
 function evText(cp) { return Math.abs(cp) >= 9000 ? (cp > 0 ? 'M' : '-M') + (10000 - Math.abs(cp)) : (cp > 0 ? '+' : '') + (cp / 100).toFixed(1); }
+/* short form for the narrow bar: +0.4, -3.2, +12, M3 */
+function evShort(cp) { if (Math.abs(cp) >= 9000) return (cp > 0 ? 'M' : '-M') + (10000 - Math.abs(cp)); const v = cp / 100; return (v > 0 ? '+' : '') + (Math.abs(v) >= 10 ? Math.round(v) : v.toFixed(1)); }
 function setEvalBar(cp) {
-  const fill = $('#evalFill'); const num = $('#evalNum');
-  if (cp == null) { fill.style.height = '50%'; fill.style.bottom = '0'; fill.style.top = 'auto'; num.textContent = ''; return; }
-  let h = winPct(cp); if (state.flip) h = 100 - h;
+  const fill = $('#evalFill'); const num = $('#evalNum'); const bar = $('#evalBar');
+  // the light part is White's share of the winning chances, drawn from White's side of the board
+  const h = cp == null ? 50 : winPct(cp);
   fill.style.height = h + '%'; fill.style.bottom = state.flip ? 'auto' : '0'; fill.style.top = state.flip ? '0' : 'auto';
-  num.textContent = evText(cp); num.style.top = (cp >= 0) !== state.flip ? 'auto' : '0'; num.style.bottom = (cp >= 0) !== state.flip ? '0' : 'auto';
+  if (cp == null) { num.textContent = ''; bar.setAttribute('aria-label', 'Evaluation not available'); return; }
+  // the number sits at the end of whoever is ahead, in the color that contrasts with that end
+  const atBottom = (cp >= 0) !== state.flip;
+  num.textContent = evShort(cp); num.style.top = atBottom ? 'auto' : '0'; num.style.bottom = atBottom ? '0' : 'auto';
   num.style.color = cp >= 0 ? 'var(--evalb)' : 'var(--evalw)';
+  bar.setAttribute('aria-label', `Evaluation ${evText(cp)}: ${Math.abs(cp) < 30 ? 'about equal' : (cp > 0 ? 'White' : 'Black') + ' is better'}`);
 }
 function coachHtml(s, rv, ply) {
   const cp = rv.evals[ply].cp;

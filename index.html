@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Opening stats, endgame stats and Stockfish game review for your chess.com games.">
+<meta name="description" content="Opening stats, Stockfish game review with explained mistakes, and puzzles from your own chess.com games.">
 <title>Chess Lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 <header class="top">
@@ -33,12 +33,13 @@
 <nav class="tabs" id="tabs" hidden>
   <button data-tab="stats" class="on">Openings and stats</button>
   <button data-tab="review">Game review</button>
+  <button data-tab="train">Train your mistakes</button>
 </nav>
 
 <main>
   <section id="empty" class="empty">
     <h1>Import your chess.com games and see where your rating goes.</h1>
-    <p>Enter a username and press Import games. Games come from chess.com's public API, so no password is needed. Opening and endgame stats are worked out in your browser. Game review runs Stockfish on your own device.</p>
+    <p>Enter a username and press Import games. Games come from chess.com's public API, so no password is needed. Stats are worked out in your browser, and Stockfish runs on your own device to explain each mistake and turn it into a puzzle you can practise.</p>
   </section>
 
   <section id="stats" hidden>
@@ -57,10 +58,10 @@
     </div>
     <div class="panel">
       <div class="insHead">
-        <h2>Play insights <span class="muted">Stockfish analysis of your recent games</span></h2>
+        <h2>Play insights <span class="muted">Stockfish analysis of your recent games in this selection</span></h2>
         <div class="insCtl">
           <label for="batchN" class="sr">Number of games</label>
-          <select id="batchN"><option value="10">Last 10 games</option><option value="20" selected>Last 20 games</option><option value="40">Last 40 games</option></select>
+          <select id="batchN"><option value="10">Last 10 games</option><option value="20" selected>Last 20 games</option><option value="40">Last 40 games</option><option value="100">Last 100 games</option></select>
           <button id="batchBtn" class="primary">Analyze recent games</button>
         </div>
       </div>
@@ -121,9 +122,9 @@
         <div class="playerBar" id="topBar"></div>
         <div class="boardWrap">
           <div id="evalBar" class="evalBar" title="Evaluation"><div id="evalFill"></div><span id="evalNum"></span></div>
-          <div class="boardBox">
-            <div id="board" class="board"></div>
-            <svg id="arrows" class="arrows" viewBox="0 0 8 8" aria-hidden="true"></svg>
+          <div class="boardBox" id="boardBox">
+            <div class="board"></div>
+            <svg class="arrows" viewBox="0 0 8 8" aria-hidden="true"></svg>
           </div>
         </div>
         <div class="playerBar" id="botBar"></div>
@@ -136,11 +137,18 @@
           <button id="bFlip">Flip board</button>
           <span class="spacer"></span>
           <label for="depth" class="sr">Engine depth</label>
-          <select id="depth"><option value="10">Quick</option><option value="12" selected>Standard</option><option value="15">Deep</option></select>
+          <select id="depth"><option value="12">Quick</option><option value="15" selected>Standard</option><option value="18">Deep</option></select>
           <button id="bAnalyze" class="primary">Analyze with Stockfish</button>
+        </div>
+        <div class="controls tools">
+          <button id="bExplore">Explore this position</button>
+          <button id="bGuess">Guess the move</button>
+          <label class="chk" for="threatsChk"><input id="threatsChk" type="checkbox"> Show threats</label>
         </div>
         <div id="progress" class="progress" hidden><div id="progressBar"></div></div>
         <div id="coach" class="coach"></div>
+        <div id="modePanel" class="modePanel" hidden></div>
+        <p id="threatNote" class="threatNote" hidden></p>
         <div class="panel graphPanel">
           <h2>Evaluation <span class="muted">Click or drag to jump to a move</span></h2>
           <canvas id="evalChart" height="150"></canvas>
@@ -160,15 +168,48 @@
           <div id="sMoments" hidden></div>
           <div id="sNotes" hidden><label for="notesBox" class="sr">Notes for this game</label><textarea id="notesBox" class="note" placeholder="Write what you learned from this game. Notes stay in this browser."></textarea></div>
         </div>
-        <p class="hint">Shortcuts: left and right arrows step through moves, space plays, F flips the board.</p>
+        <p class="hint">Shortcuts: left and right arrows step through moves, space plays, F flips the board, E explores the position, Esc goes back to the game.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section id="train" hidden>
+    <div class="trainLayout">
+      <div class="boardCol">
+        <div id="tMeta" class="gameMeta"></div>
+        <div class="boardBox" id="tBox">
+          <div class="board"></div>
+          <svg class="arrows" viewBox="0 0 8 8" aria-hidden="true"></svg>
+        </div>
+      </div>
+      <aside class="side">
+        <div class="panel">
+          <h2>Train your mistakes <span class="muted">Positions where you went wrong in your own games</span></h2>
+          <div id="tStats"></div>
+          <div class="tFilters">
+            <div class="seg" id="tFilter" role="group" aria-label="Which puzzles">
+              <button data-v="due" class="on">Due now</button><button data-v="all">All</button><button data-v="blun">Blunders</button>
+            </div>
+            <label for="tType" class="sr">Mistake type</label>
+            <select id="tType"></select>
+          </div>
+        </div>
+        <div class="panel" id="tCard"></div>
       </aside>
     </div>
   </section>
 </main>
 
-<footer class="foot">Chess Lab is not affiliated with chess.com. Data comes from the chess.com public API. Analysis by Stockfish. Pieces: cburnett set from lichess.org, GPLv2+.</footer>
+<div id="announce" class="sr" role="status" aria-atomic="true"></div>
+<footer class="foot">Chess Lab is not affiliated with chess.com. Data comes from the chess.com public API. Analysis by <a href="https://github.com/official-stockfish/Stockfish">Stockfish</a> 19 via <a href="https://github.com/nmrugg/stockfish.js">stockfish.js</a> (GPLv3). Pieces: cburnett set from lichess.org, GPLv2+.</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-<script src="app.js?v=8"></script>
+<script src="store.js?v=9"></script>
+<script src="board.js?v=9"></script>
+<script src="engine.js?v=9"></script>
+<script src="learn.js?v=9"></script>
+<script src="app.js?v=9"></script>
+<script src="explore.js?v=9"></script>
+<script src="train.js?v=9"></script>
 </body>
 </html>

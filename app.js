@@ -71,6 +71,7 @@ $('#loadForm').addEventListener('submit', (e) => {
 });
 
 const DRAWS = ['agreed', 'repetition', 'stalemate', 'insufficient', '50move', 'timevsinsufficient'];
+const DRAWHOW = { agreed: 'Agreement', repetition: 'Repetition', stalemate: 'Stalemate', insufficient: 'Insufficient material', '50move': '50-move rule', timevsinsufficient: 'Timeout vs insufficient material' };
 const HOW = { checkmated: 'Checkmate', resigned: 'Resignation', timeout: 'Timeout', abandoned: 'Abandoned', win: 'Win' };
 function normalize(g, user) {
   if (!g.pgn || g.rules !== 'chess') return null;
@@ -83,7 +84,7 @@ function normalize(g, user) {
   const variation = slug.replace(/-\d+\..*$/, '').replace(/-/g, ' ').trim() || 'Unknown opening';
   const eco = (g.pgn.match(/\[ECO "([^"]+)"\]/) || [])[1] || '';
   const raw = res === 'W' ? g[opp].result : r;
-  const how = res === 'D' ? 'Draw' : (HOW[raw] || 'Other');
+  const how = res === 'D' ? (DRAWHOW[r] || 'Draw') : (HOW[raw] || 'Other');
   return {
     url: g.url, pgn: g.pgn, end: g.end_time, tc: g.time_class, color: me, res, how, eco,
     tcontrol: g.time_control, rating: g[me].rating, oppName: g[opp].username, oppRating: g[opp].rating,
@@ -258,9 +259,14 @@ $('#openTable').addEventListener('click', (e) => {
 });
 $('#bestWorst').addEventListener('click', (e) => { const r = e.target.closest('[data-name]'); if (r) pickOpening(r.dataset.name); });
 
+/* The logical (CSS) height is read once and kept in data-h. Reading the height attribute every time
+   was a bug: this function overwrites that attribute with h * dpr, so on phones (dpr 2 to 3) the
+   canvas grew taller on every redraw. The CSS height is pinned so the layout never depends on it. */
 function fitCanvas(c) {
-  const dpr = window.devicePixelRatio || 1; const w = c.clientWidth; const h = +c.getAttribute('height');
-  c.width = w * dpr; c.height = h * dpr; const x = c.getContext('2d'); x.scale(dpr, dpr); return { x, w, h };
+  if (!c.dataset.h) c.dataset.h = c.getAttribute('height');
+  const h = +c.dataset.h; const dpr = Math.min(window.devicePixelRatio || 1, 3); const w = c.clientWidth;
+  c.style.height = h + 'px'; c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const x = c.getContext('2d'); x.scale(dpr, dpr); return { x, w, h };
 }
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
@@ -309,7 +315,7 @@ function renderList() {
   const row = (g, i) => {
     const d = g.delta; const dl = d == null ? '' : `<span class="dl ${d > 0 ? 'up' : d < 0 ? 'down' : 'flat'}">${d > 0 ? '+' : ''}${d}</span>`;
     const acc = accOf(g); const ac = acc != null ? ` · ${acc}% accuracy` : '';
-    return `<button class="g" data-i="${i}"><span class="r ${g.res}">${g.res}</span>vs ${esc(g.oppName)} (${g.oppRating})${dl}<small>${new Date(g.end * 1000).toLocaleDateString()} · ${g.tc} · ${g.color} · ${g.moveCount} moves${ac}<br>${esc(g.variation)}</small></button>`;
+    return `<button class="g" data-i="${i}"><span class="r ${g.res}">${g.res}</span>vs ${esc(g.oppName)} (${g.oppRating})${dl}<small>${new Date(g.end * 1000).toLocaleDateString()} · ${g.tc} · ${g.color} · ${g.moveCount} moves${ac}<br>${esc(g.how)} \u00B7 ${esc(g.variation)}</small></button>`;
   };
   $('#gameList').innerHTML = (state.filter.opening ? '<button class="g" data-clear="1">Show all openings</button>' : '')
     + (gs.slice(0, 200).map(row).join('') || '<p class="muted">No games match these filters.</p>')
@@ -360,10 +366,17 @@ function openGame(g) {
   if (cached && cached.evals) state.review = buildReview(state.sel, cached.evals, cached.depth);
   renderMeta(); renderGame(); renderSide();
 }
+/* How the game ended. chess.com's PGN has a Termination tag such as "name won by resignation". */
+function finishText(g) {
+  const term = (g.pgn.match(/\[Termination "([^"]+)"\]/) || [])[1];
+  if (term) { const u = state.user; return term.toLowerCase().startsWith(u.toLowerCase() + ' ') ? 'You' + term.slice(u.length) : term; }
+  const how = (g.how || '').toLowerCase();
+  return g.res === 'D' ? 'Draw' + (how && how !== 'draw' ? ' by ' + how : '') : (g.res === 'W' ? 'You won' : 'You lost') + ' by ' + how;
+}
+function resultScore(g) { return g.res === 'D' ? '\u00BD-\u00BD' : (g.res === 'W') === (g.color === 'white') ? '1-0' : '0-1'; }
 function renderMeta() {
   const { g } = state.sel; const d = new Date(g.end * 1000);
-  const res = g.res === 'W' ? 'You won' : g.res === 'L' ? 'You lost' : 'Draw';
-  $('#gameMeta').innerHTML = `<b>${esc(g.variation)}</b><span class="muted" style="margin:0">${g.eco ? g.eco + ' · ' : ''}${res} by ${esc(g.how.toLowerCase())} · ${g.tc} ${esc(g.tcontrol || '')} · ${d.toLocaleDateString()}</span><a href="${esc(g.url)}" target="_blank" rel="noopener">Open on chess.com</a>`;
+  $('#gameMeta').innerHTML = `<b>${esc(g.variation)}</b><span class="fin fin-${g.res}">${esc(finishText(g))}</span><span class="muted" style="margin:0">${g.eco ? g.eco + ' \u00B7 ' : ''}${g.tc} ${esc(g.tcontrol || '')} \u00B7 ${d.toLocaleDateString()}</span><a href="${esc(g.url)}" target="_blank" rel="noopener">Open on chess.com</a>`;
 }
 const fmtClock = (s) => { if (s == null) return '-'; const m = Math.floor(s / 60), r = Math.floor(s % 60); return s >= 3600 ? `${Math.floor(s / 3600)}:${String(m % 60).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`; };
 const START = { p: 8, n: 2, b: 2, r: 2, q: 1 };
@@ -416,7 +429,10 @@ function renderBars() {
     white: { name: me === 'white' ? state.user : g.oppName, rating: me === 'white' ? g.rating : g.oppRating, cap: cb.byWhite, adv: cb.diff, acc: state.review ? state.review.acc.w : null },
     black: { name: me === 'black' ? state.user : g.oppName, rating: me === 'black' ? g.rating : g.oppRating, cap: cb.byBlack, adv: -cb.diff, acc: state.review ? state.review.acc.b : null },
   };
-  const line = (c) => { const d = data[c]; const plus = d.adv > 0 ? ` +${d.adv}` : ''; return `<span class="nm">${esc(d.name)}</span><span class="rt">${d.rating}</span><span class="cap">${d.cap.map((k) => G[k]).join('')}<b>${plus}</b></span>${d.acc != null ? `<span class="acc">${d.acc}% accuracy</span>` : ''}<span class="clock" title="Time left">${fmtClock(clk(c === 'white'))}</span>`; };
+  const atEnd = s.moves.length > 0 && state.ply === s.moves.length;
+  const myScore = g.res === 'W' ? 1 : g.res === 'D' ? 0.5 : 0;
+  const chip = (c) => { if (!atEnd) return ''; const sc = c === g.color ? myScore : 1 - myScore; return `<span class="resChip ${sc === 1 ? 'won' : sc === 0 ? 'lost' : 'drawn'}" title="${esc(finishText(g))}">${sc === 1 ? '1' : sc === 0 ? '0' : '\u00BD'}</span>`; };
+  const line = (c) => { const d = data[c]; const plus = d.adv > 0 ? ` +${d.adv}` : ''; return `<span class="nm">${esc(d.name)}</span><span class="rt">${d.rating}</span><span class="cap">${d.cap.map((k) => G[k]).join('')}<b>${plus}</b></span>${d.acc != null ? `<span class="acc">${d.acc}% accuracy</span>` : ''}${chip(c)}<span class="clock" title="Time left">${fmtClock(clk(c === 'white'))}</span>`; };
   const top = state.flip ? 'white' : 'black', bot = state.flip ? 'black' : 'white';
   $('#topBar').innerHTML = line(top); $('#botBar').innerHTML = line(bot);
 }
@@ -426,10 +442,11 @@ function renderMoves() {
   s.moves.forEach((m, i) => {
     if (i % 2 === 0) h += `<span class="n">${i / 2 + 1}.</span>`;
     const c = rv && rv.cls[i];
-    const dot = c && c.t !== 'good' && c.t !== 'best' ? `<span class="dot k-${c.t}" title="${c.label}"></span>` : '';
+    const dot = c ? `<span class="bg k-${c.t}" title="${c.label}">${c.sym}</span>` : '';
     const t = s.spent[i] != null ? `<small>${s.spent[i] < 10 ? s.spent[i].toFixed(1) : Math.round(s.spent[i])}s</small>` : '';
     h += `<button class="mv${state.ply === i + 1 ? ' on' : ''}" data-p="${i + 1}"><span>${m.san}${dot}</span>${t}</button>`;
   });
+  h += `<div class="endrow fin-${s.g.res}">${esc(finishText(s.g))} <b>${resultScore(s.g)}</b></div>`;
   const box = $('#sMoves'); const keep = box.scrollTop; box.innerHTML = h;
   const on = box.querySelector('.mv.on');
   if (on) { const t = on.offsetTop; if (t < box.scrollTop || t + on.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = Math.max(0, t - box.clientHeight / 2); } else box.scrollTop = keep;
@@ -555,7 +572,7 @@ function isSacrifice(fen, mv) {
 const winPct = (cp) => 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * Math.max(-1500, Math.min(1500, cp)))) - 1);
 /* Thresholds are drops in win probability for the side that moved, in percentage points.
    They follow the scale Lichess uses: 10 inaccuracy, 20 mistake, 30 blunder. */
-const CLS = [[2, 'best', '', 'Best'], [10, 'good', '', 'Good'], [20, 'inacc', '?!', 'Inaccuracy'], [30, 'mist', '?', 'Mistake'], [101, 'blun', '??', 'Blunder']];
+const CLS = [[2, 'best', '\u2605', 'Best'], [10, 'good', '\u2713', 'Good'], [20, 'inacc', '?!', 'Inaccuracy'], [30, 'mist', '?', 'Mistake'], [101, 'blun', '??', 'Blunder']];
 
 /* evals is [{cp, best}] for every position; everything else is derived from it, so it can be cached */
 function buildReview(s, evals, depth) {
@@ -703,6 +720,7 @@ function renderEval() {
   coach.innerHTML = c
     ? `<span class="badge k-${c.t}">${c.label}</span>${c.missed ? '<span class="badge k-mist">Missed tactic</span>' : ''}<b>${Math.floor((state.ply - 1) / 2) + 1}${m.color === 'w' ? '.' : '...'} ${m.san}</b><span class="muted" style="margin:0">Evaluation ${evText(cp)}${bad && c.bestSan ? `. Engine preferred ${c.bestSan} (green arrow).` : ''}</span>`
     : `<b>Starting position</b><span class="muted" style="margin:0">Evaluation ${evText(cp)}</span>`;
+  if (c && state.ply === s.moves.length) coach.innerHTML += `<span class="badge fin-${s.g.res}">${esc(finishText(s.g))}</span>`;
   drawEval();
 }
 function drawEval() {
@@ -725,7 +743,16 @@ function drawEval() {
   c.addEventListener('pointermove', (e) => { if (down) at(e); });
   c.addEventListener('pointerup', () => { down = false; });
 })();
-window.addEventListener('resize', () => { if (!$('#stats').hidden) renderStats(); else drawEval(); });
+/* Redraw only the charts, and only when the width changes. Phones fire resize events when the
+   address bar collapses while scrolling (height only), which must not rebuild the page. */
+let lastW = window.innerWidth; let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (window.innerWidth === lastW) return; lastW = window.innerWidth;
+    if (!$('#stats').hidden) drawRating(filtered()); else drawEval();
+  }, 150);
+});
 
 /* ---------- start: reopen the last username from cache, or from ?u=name ---------- */
 (function boot() {

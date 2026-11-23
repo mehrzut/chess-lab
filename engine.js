@@ -30,8 +30,15 @@ const scoreCp = (o) => (o.st === 'cp' ? o.sv : (o.sv > 0 ? 10000 - o.sv : -10000
 
 class Engine {
   constructor(worker) {
-    this.w = worker; this.subs = new Set(); this.chain = Promise.resolve(); this.running = false; this.mpv = 1;
-    worker.onmessage = (e) => { if (typeof e.data !== 'string') return; for (const f of [...this.subs]) f(e.data); };
+    this.w = worker; this.subs = new Set(); this.chain = Promise.resolve(); this.running = false; this.mpv = 1; this.options = {};
+    worker.onmessage = (e) => {
+      if (typeof e.data !== 'string') return;
+      if (e.data.startsWith('option name ')) { // remember the options this build offers (UCI_Elo, Skill Level, ...)
+        const m = e.data.match(/^option name (.+?) type (\S+)(.*)$/);
+        if (m) this.options[m[1]] = { type: m[2], min: +((m[3].match(/ min (-?\d+)/) || [])[1]), max: +((m[3].match(/ max (-?\d+)/) || [])[1]) };
+      }
+      for (const f of [...this.subs]) f(e.data);
+    };
   }
   send(c) { this.w.postMessage(c); }
   wait(pred, ms) {
@@ -51,10 +58,10 @@ class Engine {
   stop() { if (this.running) this.send('stop'); }
   queue(fn) { const run = this.chain.then(fn, fn); this.chain = run.catch(() => {}); return run; }
   newGame() { return this.queue(async () => { this.send('ucinewgame'); await this.ready(); }); }
-  /* o: { depth, multipv, moves (searchmoves), onInfo(lines, depth), stale() } -> { best, lines: [{depth, cp, pv}] }
+  /* o: { depth, movetime (ms, instead of depth), multipv, moves (searchmoves), onInfo(lines, depth), stale() } -> { best, lines: [{depth, cp, pv}] }
      cp in lines is from White's point of view. Returns null if stale() was true before it started. */
   search(fen, o = {}) { return this.queue(() => (o.stale && o.stale() ? null : this.run(fen, o))); }
-  run(fen, { depth = 12, multipv = 1, moves = null, onInfo = null }) {
+  run(fen, { depth = 12, movetime = 0, multipv = 1, moves = null, onInfo = null }) {
     const sgn = fen.split(' ')[1] === 'w' ? 1 : -1;
     return new Promise((res) => {
       if (multipv !== this.mpv) { this.send('setoption name MultiPV value ' + multipv); this.mpv = multipv; }
@@ -71,7 +78,7 @@ class Engine {
       };
       this.subs.add(f); this.running = true;
       this.send('position fen ' + fen);
-      this.send('go depth ' + depth + (moves && moves.length ? ' searchmoves ' + moves.join(' ') : ''));
+      this.send((movetime ? 'go movetime ' + movetime : 'go depth ' + depth) + (moves && moves.length ? ' searchmoves ' + moves.join(' ') : ''));
     });
   }
 }
@@ -112,6 +119,28 @@ async function evalPosition(eng, fen, depth) {
   const r = await eng.search(fen, { depth });
   const l = r.lines[0];
   return { cp: l ? l.cp : 0, best: r.best, pv: l ? l.pv.slice(0, 10) : (r.best ? [r.best] : []) };
+}
+
+/* The opponent in Play and learn: its own worker, so a weakened engine never coaches.
+   elo 0 means full strength. Uses UCI_Elo when the build offers it, else Skill Level. */
+async function playEngine(elo) {
+  const eng = await getEngine('play');
+  if (eng.elo === elo) return eng;
+  await eng.queue(async () => {
+    const o = eng.options;
+    if (!elo) {
+      if (o.UCI_LimitStrength) eng.send('setoption name UCI_LimitStrength value false');
+      if (o['Skill Level']) eng.send('setoption name Skill Level value 20');
+    } else if (o.UCI_Elo) {
+      const v = Math.max(o.UCI_Elo.min || 0, Math.min(o.UCI_Elo.max || 4000, elo));
+      eng.send('setoption name UCI_LimitStrength value true'); eng.send('setoption name UCI_Elo value ' + v);
+    } else if (o['Skill Level']) {
+      eng.send('setoption name Skill Level value ' + Math.round(Math.max(0, Math.min(20, (elo - 1300) / 60))));
+    }
+    eng.send('ucinewgame'); await eng.ready();
+  });
+  eng.elo = elo;
+  return eng;
 }
 
 /* ---------- live analysis (explore mode) ---------- */

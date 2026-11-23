@@ -291,3 +291,18 @@ td.name { white-space: normal; min-width: 14rem; }
   .rep { flex-direction: column; }
   .mini { width: 100%; max-width: 220px; }
 }
+
+/* play and learn */
+.setup { display: grid; gap: .75rem; }
+.field { display: grid; gap: .3rem; }
+.flabel { font-size: .85rem; font-weight: 600; color: var(--muted); }
+.setup .seg { display: flex; } .setup .seg button { flex: 1; }
+.setup label.chk { display: flex; gap: .4rem; align-items: center; font-size: .9rem; color: var(--muted); }
+.pmoves { max-height: 260px; }
+.pmoves .mv { cursor: default; }
+.pmoves .mv:hover { background: transparent; }
+.pmoves .mv.on { background: var(--accent-soft); color: var(--accent); }
+#play .playerBar .clock { margin-left: auto; }
+.clock.low { color: var(--loss); border-color: var(--loss); }
+.empty .primary { margin-top: .4rem; }
+#pCard p.muted, #tCard p.muted, .modePanel p.muted { margin-left: 0; }

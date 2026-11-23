@@ -49,6 +49,7 @@ The first deploy asks whether to create the project. Choose production branch `m
 - **Guess the move:** replay your own game and guess each of your moves before it is shown. Each guess is compared with the engine and with what you played.
 - **Show threats:** marks loose pieces (yours with a solid red ring, theirs with a dashed green ring) and says what the last move attacks.
 - **Train your mistakes:** every mistake and blunder from your analyzed games becomes a puzzle. Find a better move than the one you played. Puzzles you solve come back after 1, 3, 7, 21 and 60 days; ones you miss come back the next day. You can drag, click or type moves.
+- **Play and learn:** play Stockfish at a strength from about 1350 to full strength, with or without a clock. A second, full-strength engine checks each of your moves. When one is a mistake (you choose how strict), the game pauses and says what your move allows without giving away the answer; you can take it back and try again, see the better move, or keep your move. Hints, take-backs and "Play from here" (from any position in Game review) are included, and a finished game opens in Game review. With a clock, yours stops while the coach checks a move, and both stop when you leave the tab. No chess.com account is needed.
 - **Play insights:** analyze your last 10, 20, 40 or 100 games in the current filters to see accuracy, what kind of mistakes you make, how they relate to your clock, positions where you went wrong more than once, the move where each opening first slips, and the games to review first.
 
 ## How it works
@@ -69,6 +70,7 @@ The first deploy asks whether to create the project. Choose production branch `m
 - `learn.js`: mistake explanations, loose pieces, mistake patterns, puzzles and review schedule
 - `app.js`: import, stats, game list, game review, insights
 - `explore.js`: explore mode and guess the move
+- `play.js`: the Play and learn tab (coached games against Stockfish, optional clock)
 - `train.js`: the Train your mistakes tab
 - `vendor/stockfish/`: Stockfish 19 lite (stockfish.js 19.0.1, GPLv3; see `Copying.txt`, source at github.com/nmrugg/stockfish.js)
 - `.nojekyll`: tells GitHub Pages to serve the files as they are

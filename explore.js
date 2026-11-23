@@ -6,7 +6,7 @@
 function updateModeButtons() {
   $('#bExplore').textContent = state.mode === 'explore' ? 'Back to game' : 'Explore this position';
   $('#bGuess').textContent = state.mode === 'guess' ? 'Stop guessing' : 'Guess the move';
-  $('#bExplore').disabled = state.mode === 'guess';
+  $('#bExplore').disabled = state.mode === 'guess'; $('#bPlayHere').disabled = state.mode === 'guess';
 }
 /* back to plain game review without redrawing (used by openGame and go) */
 function resetMode() {

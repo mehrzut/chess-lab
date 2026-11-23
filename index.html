@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <header class="top">
@@ -30,16 +30,19 @@
   <button id="themeBtn" class="ghost" aria-label="Switch light and dark theme">Theme</button>
 </header>
 
-<nav class="tabs" id="tabs" hidden>
+<nav class="tabs" id="tabs">
   <button data-tab="stats" class="on">Openings and stats</button>
   <button data-tab="review">Game review</button>
   <button data-tab="train">Train your mistakes</button>
+  <button data-tab="play">Play and learn</button>
 </nav>
 
 <main>
   <section id="empty" class="empty">
     <h1>Import your chess.com games and see where your rating goes.</h1>
     <p>Enter a username and press Import games. Games come from chess.com's public API, so no password is needed. Stats are worked out in your browser, and Stockfish runs on your own device to explain each mistake and turn it into a puzzle you can practise.</p>
+    <p>No chess.com account? You can still play Stockfish and learn as you go: it stops you when you make a mistake.</p>
+    <button class="primary" data-goto="play">Play and learn against Stockfish</button>
   </section>
 
   <section id="stats" hidden>
@@ -143,6 +146,7 @@
         <div class="controls tools">
           <button id="bExplore">Explore this position</button>
           <button id="bGuess">Guess the move</button>
+          <button id="bPlayHere">Play from here</button>
           <label class="chk" for="threatsChk"><input id="threatsChk" type="checkbox"> Show threats</label>
         </div>
         <div id="progress" class="progress" hidden><div id="progressBar"></div></div>
@@ -198,18 +202,52 @@
       </aside>
     </div>
   </section>
+
+  <section id="play" hidden>
+    <div class="trainLayout">
+      <div class="boardCol">
+        <div class="playerBar" id="pTop"></div>
+        <div class="boardBox" id="pBox">
+          <div class="board"></div>
+          <svg class="arrows" viewBox="0 0 8 8" aria-hidden="true"></svg>
+        </div>
+        <div class="playerBar" id="pBot"></div>
+      </div>
+      <aside class="side">
+        <div class="panel" id="pCard"></div>
+        <div class="panel">
+          <h2>Play and learn <span class="muted">Stockfish stops you when you make a mistake</span></h2>
+          <div class="setup">
+            <div class="field"><span class="flabel" id="pSideLbl">Your side</span>
+              <div class="seg" id="pSide" role="group" aria-labelledby="pSideLbl"><button data-v="w">White</button><button data-v="b">Black</button><button data-v="r">Random</button></div></div>
+            <div class="field"><label for="pLevel" class="flabel">Opponent</label><select id="pLevel"></select></div>
+            <div class="field"><label for="pCoach" class="flabel">Coach</label><select id="pCoach"></select></div>
+            <div class="field"><label for="pClock" class="flabel">Clock</label><select id="pClock"></select></div>
+            <label class="chk" for="pThreats"><input id="pThreats" type="checkbox"> Show threats on the board</label>
+            <button id="pStart" class="primary">Start a new game</button>
+            <p class="muted small" style="margin:0">With a clock, yours stops while the coach checks a move, and both stop when you leave this tab.</p>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Moves</h2>
+          <div id="pMoves" class="moves pmoves"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
 </main>
 
 <div id="announce" class="sr" role="status" aria-atomic="true"></div>
 <footer class="foot">Chess Lab is not affiliated with chess.com. Data comes from the chess.com public API. Analysis by <a href="https://github.com/official-stockfish/Stockfish">Stockfish</a> 19 via <a href="https://github.com/nmrugg/stockfish.js">stockfish.js</a> (GPLv3). Pieces: cburnett set from lichess.org, GPLv2+.</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-<script src="store.js?v=10"></script>
-<script src="board.js?v=10"></script>
-<script src="engine.js?v=10"></script>
-<script src="learn.js?v=10"></script>
-<script src="app.js?v=10"></script>
-<script src="explore.js?v=10"></script>
-<script src="train.js?v=10"></script>
+<script src="store.js?v=11"></script>
+<script src="board.js?v=11"></script>
+<script src="engine.js?v=11"></script>
+<script src="learn.js?v=11"></script>
+<script src="app.js?v=11"></script>
+<script src="explore.js?v=11"></script>
+<script src="play.js?v=11"></script>
+<script src="train.js?v=11"></script>
 </body>
 </html>

@@ -145,11 +145,17 @@ function annotate(gs) {
 function tab(name) {
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
   if (name !== 'review' && state.mode !== 'game') leaveMode();
+  if (name !== 'play') stopClock();
   liveStop();
-  ['stats', 'review', 'train'].forEach((t) => { $('#' + t).hidden = t !== name; });
-  if (name === 'stats') renderStats(); else if (name === 'review') drawEval(); else openTrain();
+  // stats needs imported games, and review needs them or an open game (a practice game counts)
+  const empty = !state.games.length && (name === 'stats' || (name === 'review' && !state.sel));
+  $('#empty').hidden = !empty;
+  ['stats', 'review', 'train', 'play'].forEach((t) => { $('#' + t).hidden = t !== name || empty; });
+  if (empty) return;
+  if (name === 'stats') renderStats(); else if (name === 'review') drawEval(); else if (name === 'train') openTrain(); else openPlay();
 }
 $('#tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) tab(e.target.dataset.tab); });
+$('#empty').addEventListener('click', (e) => { if (e.target.closest('[data-goto="play"]')) tab('play'); });
 function seg(id, key) {
   $(id).addEventListener('click', (e) => {
     if (!e.target.dataset.v) return;
@@ -344,7 +350,8 @@ function parseClocks(pgn) {
 function prepare(g) {
   const ch = new Chess(); ch.load_pgn(g.pgn);
   const moves = ch.history({ verbose: true });
-  const rep = new Chess(); const fens = [rep.fen()];
+  const start = (g.pgn.match(/\[FEN "([^"]+)"\]/) || [])[1];
+  const rep = new Chess(start || undefined); const fens = [rep.fen()];
   moves.forEach((m) => { rep.move(m.san); fens.push(rep.fen()); });
   const clocks = parseClocks(g.pgn);
   const inc = +(String(g.tcontrol || '').split('+')[1] || 0);
@@ -371,7 +378,7 @@ function finishText(g) {
 function resultScore(g) { return g.res === 'D' ? '\u00BD-\u00BD' : (g.res === 'W') === (g.color === 'white') ? '1-0' : '0-1'; }
 function renderMeta() {
   const { g } = state.sel; const d = new Date(g.end * 1000);
-  $('#gameMeta').innerHTML = `<b>${esc(g.variation)}</b><span class="fin fin-${g.res}">${esc(finishText(g))}</span><span class="muted" style="margin:0">${g.eco ? g.eco + ' \u00B7 ' : ''}${g.tc} ${esc(g.tcontrol || '')} \u00B7 ${d.toLocaleDateString()}</span><a href="${esc(g.url)}" target="_blank" rel="noopener">Open on chess.com</a>`;
+  $('#gameMeta').innerHTML = `<b>${esc(g.variation)}</b><span class="fin fin-${g.res}">${esc(finishText(g))}</span><span class="muted" style="margin:0">${g.eco ? g.eco + ' \u00B7 ' : ''}${g.tc} ${esc(g.tcontrol || '')} \u00B7 ${d.toLocaleDateString()}</span>${/^https?:/.test(g.url) ? `<a href="${esc(g.url)}" target="_blank" rel="noopener">Open on chess.com</a>` : ''}`;
 }
 const fmtClock = (s) => { if (s == null) return '-'; const m = Math.floor(s / 60), r = Math.floor(s % 60); return s >= 3600 ? `${Math.floor(s / 3600)}:${String(m % 60).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`; };
 const START = { p: 8, n: 2, b: 2, r: 2, q: 1 };
@@ -436,8 +443,8 @@ function renderBars(fen) {
   };
   const me = g.color;
   const data = {
-    white: { name: me === 'white' ? state.user : g.oppName, rating: me === 'white' ? g.rating : g.oppRating, cap: cb.byWhite, adv: cb.diff, acc: state.review ? state.review.acc.w : null },
-    black: { name: me === 'black' ? state.user : g.oppName, rating: me === 'black' ? g.rating : g.oppRating, cap: cb.byBlack, adv: -cb.diff, acc: state.review ? state.review.acc.b : null },
+    white: { name: me === 'white' ? (state.user || 'You') : g.oppName, rating: me === 'white' ? g.rating : g.oppRating, cap: cb.byWhite, adv: cb.diff, acc: state.review ? state.review.acc.w : null },
+    black: { name: me === 'black' ? (state.user || 'You') : g.oppName, rating: me === 'black' ? g.rating : g.oppRating, cap: cb.byBlack, adv: -cb.diff, acc: state.review ? state.review.acc.b : null },
   };
   const hideAcc = state.mode === 'guess';
   const atEnd = state.mode === 'game' && s.moves.length > 0 && state.ply === s.moves.length;

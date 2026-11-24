@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Opening stats, Stockfish game review with explained mistakes, and puzzles from your own chess.com games.">
+<meta name="description" content="Opening stats, Stockfish game review with explained mistakes, an AI teacher, and puzzles from your own chess.com games.">
 <title>Chess Lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap">
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 <header class="top">
@@ -27,6 +27,7 @@
     <button id="loadBtn" type="submit" class="primary">Import games</button>
   </form>
   <div id="status" class="status" role="status"></div>
+  <button id="teachBtn" class="ghost" aria-haspopup="dialog">Teacher</button>
   <button id="themeBtn" class="ghost" aria-label="Switch light and dark theme">Theme</button>
 </header>
 
@@ -153,6 +154,7 @@
         <div id="coach" class="coach"></div>
         <div id="modePanel" class="modePanel" hidden></div>
         <p id="threatNote" class="threatNote" hidden></p>
+        <section id="teach" class="teach" tabindex="-1" aria-label="Teacher" hidden></section>
         <div class="panel graphPanel">
           <h2>Evaluation <span class="muted">Click or drag to jump to a move</span></h2>
           <canvas id="evalChart" height="150"></canvas>
@@ -215,6 +217,7 @@
       </div>
       <aside class="side">
         <div class="panel" id="pCard"></div>
+        <section class="panel teach" id="pTeach" tabindex="-1" aria-label="Teacher" hidden></section>
         <div class="panel">
           <h2>Play and learn <span class="muted">Stockfish stops you when you make a mistake</span></h2>
           <div class="setup">
@@ -238,16 +241,50 @@
 </main>
 
 <div id="announce" class="sr" role="status" aria-atomic="true"></div>
+
+<dialog id="teachDlg" class="tdlg" aria-labelledby="tdTitle">
+  <form method="dialog">
+    <div class="tdHead"><h2 id="tdTitle">Your teacher</h2><button value="close" class="ghost">Close</button></div>
+    <p class="tdIntro">Stockfish decides what is good and bad. A free AI only puts it into words, answers your questions and remembers what you tend to get wrong. It is off until you add a free key.</p>
+    <section aria-labelledby="tdMainH">
+      <h3 id="tdMainH">Main AI</h3>
+      <div id="tdMain" class="tdSlot"></div>
+    </section>
+    <section aria-labelledby="tdBackupH">
+      <h3 id="tdBackupH">Backup AI <span class="muted">Answers when the main one runs out of free questions</span></h3>
+      <div id="tdBackup" class="tdSlot"></div>
+    </section>
+    <section aria-labelledby="tdToneH">
+      <h3 id="tdToneH">Tone</h3>
+      <div class="seg" id="tdTone" role="group" aria-labelledby="tdToneH"><button type="button" data-v="roast">Roast me (funny)</button><button type="button" data-v="kind">Friendly</button></div>
+      <div class="acts"><button type="button" id="tdTest">Test the teacher</button></div>
+      <p id="tdTestMsg" class="small" role="status"></p>
+      <p class="small muted" id="tdPriv" style="margin:0"></p>
+    </section>
+    <section aria-labelledby="tdMemH">
+      <h3 id="tdMemH">What your teacher knows about you</h3>
+      <div class="field"><label for="tdAbout" class="flabel">About you (optional)</label><textarea id="tdAbout" rows="3" maxlength="600" placeholder="For example: I'm about 1200 on chess.com. I want to stop hanging pieces and get better at endgames."></textarea></div>
+      <p class="flabel">Worked out from your games, practice and puzzles</p>
+      <ul id="tdProfile" class="tdProfile"></ul>
+      <p class="flabel">Lessons you saved</p>
+      <ul id="tdLessons" class="tdLessons"></ul>
+      <div class="acts"><button type="button" id="tdForget">Forget lessons and practice history</button></div>
+      <p class="small muted" style="margin:0">All of this goes with each question, so the teacher can connect a mistake to your habits. It is kept only in this browser.</p>
+    </section>
+    <div class="acts tdFoot"><button value="close" class="primary">Done</button></div>
+  </form>
+</dialog>
 <footer class="foot">Chess Lab is not affiliated with chess.com. Data comes from the chess.com public API. Analysis by <a href="https://github.com/official-stockfish/Stockfish">Stockfish</a> 19 via <a href="https://github.com/nmrugg/stockfish.js">stockfish.js</a> (GPLv3). Pieces: cburnett set from lichess.org, GPLv2+.</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-<script src="store.js?v=11"></script>
-<script src="board.js?v=11"></script>
-<script src="engine.js?v=11"></script>
-<script src="learn.js?v=11"></script>
-<script src="app.js?v=11"></script>
-<script src="explore.js?v=11"></script>
-<script src="play.js?v=11"></script>
-<script src="train.js?v=11"></script>
+<script src="store.js?v=12"></script>
+<script src="board.js?v=12"></script>
+<script src="engine.js?v=12"></script>
+<script src="learn.js?v=12"></script>
+<script src="app.js?v=12"></script>
+<script src="explore.js?v=12"></script>
+<script src="play.js?v=12"></script>
+<script src="teacher.js?v=12"></script>
+<script src="train.js?v=12"></script>
 </body>
 </html>

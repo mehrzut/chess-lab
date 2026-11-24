@@ -111,6 +111,7 @@ async function onPlayMove(mv) {
     let ex = null;
     try { ex = explainMove({ moves: [r], fens: [before, pl.ch.fen()], clocks: [], spent: [], base: null }, [pre, post], 0, drop, null); } catch (_) { ex = null; }
     pl.flag = { entry, ex, before, pre, post, better: false }; pl.counts.flagged++; pl.phase = 'flagged';
+    teachNote('flag', { type: ex ? ex.type : 'other', cls: c[1] });
     drawPlay(); announce(`${label}: ${r.san}. ${hintText(pl.flag)}`);
     return;
   }
@@ -196,6 +197,8 @@ function finish(kind, side) {
   else if (ch.in_checkmate()) { res = ch.turn() === pl.color ? 'L' : 'W'; how = 'Checkmate'; }
   else { res = 'D'; how = ch.in_stalemate() ? 'Stalemate' : ch.in_threefold_repetition() ? 'Repetition' : ch.insufficient_material() ? 'Insufficient material' : '50-move rule'; }
   pl.result = { res, how };
+  const mine = pl.log.filter((e) => e.mine && e.t);
+  if (mine.length) teachNote('game', { res, flagged: pl.counts.flagged, corrected: pl.counts.corrected, kept: pl.counts.kept, acc: Math.round(mine.reduce((a, e) => a + moveAcc(e.drop), 0) / mine.length) });
   kv.del('play:current'); drawPlay();
   announce(res === 'W' ? `You won by ${how.toLowerCase()}.` : res === 'L' ? `You lost by ${how.toLowerCase()}.` : `Draw by ${how.toLowerCase()}.`);
 }
@@ -282,7 +285,7 @@ function drawPlay() {
   $('#pMoves').innerHTML = h || '<span class="muted" style="grid-column:1/-1;margin:0">No moves yet.</span>';
   const mv = $('#pMoves'); mv.scrollTop = mv.scrollHeight;
 
-  card.innerHTML = cardHtml();
+  card.innerHTML = cardHtml(); teachSync();
   if (pl.phase === 'you') { const inp = $('#pMove'); if (inp && document.activeElement && document.activeElement.id === 'pMove') inp.focus(); }
 }
 function cardHtml() {
@@ -306,13 +309,13 @@ function cardHtml() {
     if (!f.better) {
       return `${head}<div class="badges"><span class="badge k-${e.t}">${e.label}</span>${type}</div>
         <p class="big">Wait: ${esc(e.san)} is a ${e.label.toLowerCase()}.</p><p class="why">${esc(hintText(f))}</p>
-        <div class="acts"><button data-act="retry" class="primary">Take it back and try again</button><button data-act="better">Show the better move</button><button data-act="keep">Keep my move</button></div>`;
+        <div class="acts"><button data-act="retry" class="primary">Take it back and try again</button><button data-act="better">Show the better move</button><button data-act="keep">Keep my move</button>${teachBtnHtml('play')}</div>`;
     }
     const tip = f.ex && MTYPES[f.ex.type] ? `<p class="muted">${esc(MTYPES[f.ex.type].tip)}</p>` : '';
     return `${head}<div class="badges"><span class="badge k-${e.t}">${e.label}</span>${type}</div>
       <p class="big">Better was ${esc(f.ex && f.ex.bestSan ? f.ex.bestSan : f.pre.best)} (green arrow).</p>
       ${f.ex ? `<p class="why">${esc(f.ex.text)}</p>${f.ex.bestLine ? `<p><b>Best line:</b> ${esc(f.ex.bestLine)}</p>` : ''}` : ''}${tip}
-      <div class="acts"><button data-act="playBetter" class="primary">Play the better move</button><button data-act="retry">Try again myself</button><button data-act="keep">Keep my move</button></div>`;
+      <div class="acts"><button data-act="playBetter" class="primary">Play the better move</button><button data-act="retry">Try again myself</button><button data-act="keep">Keep my move</button>${teachBtnHtml('play')}</div>`;
   }
   // your turn
   const hintBtn = pl.hint >= 2 ? '' : `<button data-act="hint">${pl.hint ? 'Show the move' : 'Hint'}</button>`;

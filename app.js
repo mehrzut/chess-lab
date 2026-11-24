@@ -434,6 +434,7 @@ function renderGame() {
   view.marks = threatMarks(view.fen);
   board.set(view);
   renderBars(view.fen); renderMoves(); renderEval(); renderThreatNote(view.fen, view.last);
+  teachSync();
 }
 function renderBars(fen) {
   const s = state.sel; const g = s.g; const cb = capturedBy(fen);
@@ -789,13 +790,14 @@ function coachHtml(s, rv, ply) {
   if (ply === s.moves.length) head += `<span class="badge fin-${s.g.res}">${esc(finishText(s.g))}</span>`;
   if (!ex) {
     const hint = ['inacc', 'mist', 'blun'].includes(c.t) && c.bestSan ? `<p class="why">Engine preferred ${esc(c.bestSan)} (green arrow).</p>` : '';
-    return `<div class="coachHead">${head}</div>${hint}`;
+    return `<div class="coachHead">${head}</div>${hint}<div class="acts">${teachBtnHtml('review')}</div>`;
   }
   const mineMove = ex.type !== 'opp';
   const acts = [];
   if (ex.refUci.length) acts.push(`<button data-act="ref">${mineMove ? 'See their best reply' : 'See the best answer'}</button>`);
   if (mineMove && ex.bestUci.length) acts.push('<button data-act="best">See the better move</button>');
   if (mineMove) acts.push('<button data-act="try">Try another move</button>');
+  acts.push(teachBtnHtml('review'));
   const legend = `<span class="legend"><i class="sw sw-best"></i>better move${c.drop >= 20 ? '<i class="sw sw-ref"></i>best reply' : ''}</span>`;
   const old = mineMove && !ex.detailed ? '<p class="muted small">This game was analyzed by an older version. Analyze it again for a fuller explanation.</p>' : '';
   return `<div class="coachHead">${head}</div><p class="why">${esc(ex.text)}${ex.tag ? ' ' + esc(ex.tag.text) : ''}</p><div class="acts">${acts.join('')}${legend}</div>${old}`;

@@ -61,7 +61,7 @@ function renderExplore() {
   $('#coach').hidden = true; $('#modePanel').hidden = false; $('.graphPanel').classList.add('dim');
   const lines = ex.linesFen === v.fen ? ex.lines : null;
   setEvalBar(lines && lines[0] ? lines[0].cp : null);
-  drawExplorePanel();
+  drawExplorePanel(); teachSync();
   if (ex.linesFen !== v.fen) {
     ex.linesFen = v.fen; ex.lines = null; ex.depth = 0; ex.err = null;
     const fen = v.fen; let pending = false;

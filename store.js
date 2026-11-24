@@ -10,7 +10,8 @@ const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 /* one polite status message for screen readers (puzzle and guess results) */
 function announce(text) { const el = document.getElementById('announce'); if (!el) return; el.textContent = ''; setTimeout(() => { el.textContent = text; }, 30); }
 
-const PREF_KEYS = ['theme', 'user', 'threats'];
+/* settings that stay in localStorage (everything else under chesslab: moves to IndexedDB) */
+const PREF_KEYS = ['theme', 'user', 'threats', 'play', 'teacher'];
 const prefs = {
   get(k) { try { return JSON.parse(localStorage.getItem('chesslab:' + k)); } catch (_) { return null; } },
   set(k, v) { try { localStorage.setItem('chesslab:' + k, JSON.stringify(v)); return true; } catch (_) { return false; } },

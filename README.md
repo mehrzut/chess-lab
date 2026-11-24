@@ -50,6 +50,7 @@ The first deploy asks whether to create the project. Choose production branch `m
 - **Show threats:** marks loose pieces (yours with a solid red ring, theirs with a dashed green ring) and says what the last move attacks.
 - **Train your mistakes:** every mistake and blunder from your analyzed games becomes a puzzle. Find a better move than the one you played. Puzzles you solve come back after 1, 3, 7, 21 and 60 days; ones you miss come back the next day. You can drag, click or type moves.
 - **Play and learn:** play Stockfish at a strength from about 1350 to full strength, with or without a clock. A second, full-strength engine checks each of your moves. When one is a mistake (you choose how strict), the game pauses and says what your move allows without giving away the answer; you can take it back and try again, see the better move, or keep your move. Hints, take-backs and "Play from here" (from any position in Game review) are included, and a finished game opens in Game review. With a clock, yours stops while the coach checks a move, and both stop when you leave the tab. No chess.com account is needed.
+- **Personal teacher (optional):** press Ask the teacher in Game review, or when Play and learn stops you, and an AI explains the move in plain words. You can ask follow-ups like "why not Nf3?", and Stockfish checks any move you type before the teacher answers. While you are still looking for a better move in Play and learn, the teacher only gives hints. The teacher knows what you tend to get wrong: mistake types from your analyzed games, practice games and puzzles, plus a note about yourself and the lessons you choose to keep. The tone is a playful roast by default, or friendly if you prefer. It uses a free AI service with your own key, and you can add a backup model for when the first one reaches its free limit.
 - **Play insights:** analyze your last 10, 20, 40 or 100 games in the current filters to see accuracy, what kind of mistakes you make, how they relate to your clock, positions where you went wrong more than once, the move where each opening first slips, and the games to review first.
 
 ## How it works
@@ -61,6 +62,19 @@ The first deploy asks whether to create the project. Choose production branch `m
 - Explanations come from the stored engine lines: the best reply after your move shows what it allowed, and the material count along that line (after equal trades cancel out) tells a hung piece from a tactic. Games analyzed by an older version have shorter lines, so analyzing them again gives fuller explanations.
 - A brilliant move is a near-best move that gives up a piece for less than it is worth in a position that was not already winning. A missed tactic is a big mistake where the best move was a capture or check. These are close to chess.com's categories but not identical, and chess.com's own premium Insights are not available through any public API.
 
+## The teacher
+
+Stockfish and the rules above decide everything: the best move, what a move allows and the type of mistake. The teacher gets those facts, Stockfish's three best moves and a short profile of you, and it is told to only put them into words. If you ask about a move, Stockfish checks it first and the result goes to the teacher with your question. If an answer names a move Stockfish did not supply, that move gets a dotted underline. Click it and Stockfish checks it. Checked moves are chips you can click to step through the line.
+
+The teacher is off until you open Teacher (top right) and add a key. It works with any OpenAI-compatible service that allows calls from a web page:
+
+- **Groq (recommended):** free, no card needed. About 1,000 requests a day per model, limited to a few a minute by tokens. Groq does not train on what you send. Get a key at [console.groq.com/keys](https://console.groq.com/keys). Each Groq model has its own allowance, so the default backup is a second Groq model on the same key.
+- **Google Gemini:** free, no card needed. Flash-Lite allows a few hundred requests a day, but the larger Flash models only about 20. Google may use free-tier prompts to improve its products, and its terms restrict the free tier in the EU, UK and Switzerland. Get a key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+- **OpenRouter free models:** about 50 requests a day ([openrouter.ai/settings/keys](https://openrouter.ai/settings/keys)).
+- **Mistral** (free Experiment plan, phone number needed), **Ollama** running on your own computer, or any other OpenAI-compatible address.
+
+Keys and settings stay in this browser's local storage. Each key is sent only to its own service. Each question sends the position, Stockfish's findings and your chess profile, and nothing else. The settings window shows exactly what the teacher knows about you, and lets you delete saved lessons or forget your practice history.
+
 ## Files
 
 - `index.html`, `style.css`: layout and styling
@@ -71,6 +85,7 @@ The first deploy asks whether to create the project. Choose production branch `m
 - `app.js`: import, stats, game list, game review, insights
 - `explore.js`: explore mode and guess the move
 - `play.js`: the Play and learn tab (coached games against Stockfish, optional clock)
+- `teacher.js`: the teacher: AI settings with main and backup, your profile, the facts sent with each question, and answers with checked moves
 - `train.js`: the Train your mistakes tab
 - `vendor/stockfish/`: Stockfish 19 lite (stockfish.js 19.0.1, GPLv3; see `Copying.txt`, source at github.com/nmrugg/stockfish.js)
 - `.nojekyll`: tells GitHub Pages to serve the files as they are

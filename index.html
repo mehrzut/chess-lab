@@ -7,15 +7,52 @@
 <title>Chess Lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap">
-<link rel="stylesheet" href="style.css?v=13">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
+<svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <symbol id="i-knight" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M19 22H5v-2h14v2M13 2c-1.25 0-2.42.2-3.5.57C8.06 3.2 7 4.5 7 6c0 1.1.6 2.1 1.5 2.6L6 11v2l3-1v2.5L5.5 17c-.3.3-.5.7-.5 1.1V20h2v-1l2-2h5l2 2v1h2v-2.5c0-.6-.2-1.2-.6-1.6L15 13V9c0-1.1.9-2 2-2h1V4c0-1.1-.9-2-2-2h-3Z"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M8 5.5v13l11-6.5-11-6.5Z"/></symbol>
+  <symbol id="i-cap" viewBox="0 0 24 24"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12.5V17c0 1.7 2.7 3 6 3s6-1.3 6-3v-4.5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M12 22c4.4 0 7-2.9 7-6.6 0-2.6-1.5-4.7-3.4-6.4C14.3 7.8 13 6.2 13 4c-3.2 1.6-5 4.1-5 6.6 0 1 .2 1.9.6 2.7C7.3 12.6 6 13.9 6 15.7 6 19.4 8.3 22 12 22Z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></symbol>
+  <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5v2a3 3 0 0 0 3 3M16 6h3v2a3 3 0 0 1-3 3M12 13v5M8 21h8M9 18h6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12.5 5 5L20 6.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-first" viewBox="0 0 24 24"><path d="M6 5v14M18 5 9 12l9 7V5Z"/></symbol>
+  <symbol id="i-last" viewBox="0 0 24 24"><path d="M18 5v14M6 5l9 7-9 7V5Z"/></symbol>
+  <symbol id="i-flip" viewBox="0 0 24 24"><path d="M4 9a8 8 0 0 1 13.5-4.5L20 7M20 15a8 8 0 0 1-13.5 4.5L4 17"/><path d="M20 3v4h-4M4 21v-4h4"/></symbol>
+  <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 2Z"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7 4 12l5 5"/><path d="M4 12h9a6 6 0 0 1 6 6v1"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2Z"/><path fill="currentColor" stroke="none" d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13Z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+</svg>
 <header class="top">
-  <div class="brand">Chess Lab</div>
+  <a class="brand" href="#" aria-label="Chess Lab home">
+    <span class="brandMark"><svg class="ic" aria-hidden="true"><use href="#i-knight"></use></svg></span>
+    <span class="brandText"><b>Chess Lab</b><small>Level up your chess</small></span>
+  </a>
   <form id="loadForm" class="load">
-    <label for="user" class="sr">chess.com username</label>
-    <input id="user" autocomplete="username" spellcheck="false" placeholder="Your chess.com username" required>
+    <div class="loadField">
+      <svg class="ic loadIcon" aria-hidden="true"><use href="#i-search"></use></svg>
+      <label for="user" class="sr">chess.com username</label>
+      <input id="user" autocomplete="username" spellcheck="false" placeholder="chess.com username" required>
+    </div>
     <label for="months" class="sr">Months to load</label>
     <select id="months">
       <option value="3">Last 3 months</option>
@@ -24,26 +61,49 @@
       <option value="36">Last 3 years</option>
       <option value="0">Everything</option>
     </select>
-    <button id="loadBtn" type="submit" class="primary">Import games</button>
+    <button id="loadBtn" type="submit" class="primary"><svg class="ic" aria-hidden="true"><use href="#i-download"></use></svg> Import</button>
   </form>
+  <div class="topStats" aria-label="Your progress">
+    <span class="chip streak" title="Days in a row you have practised"><svg class="ic" aria-hidden="true"><use href="#i-flame"></use></svg><b id="stStreak">1</b><span>day streak</span></span>
+    <span class="chip" title="Puzzles you have solved"><svg class="ic" aria-hidden="true"><use href="#i-star"></use></svg><b id="stPuzzles">0</b><span>puzzles</span></span>
+    <span class="chip" title="Games you have analyzed"><svg class="ic" aria-hidden="true"><use href="#i-chart"></use></svg><b id="stAnalyzed">0</b><span>analyzed</span></span>
+  </div>
   <div id="status" class="status" role="status"></div>
-  <button id="teachBtn" class="ghost" aria-haspopup="dialog">Teacher</button>
-  <button id="themeBtn" class="ghost" aria-label="Switch light and dark theme">Theme</button>
+  <button id="teachBtn" class="ghost teachBtn" aria-haspopup="dialog"><svg class="ic" aria-hidden="true"><use href="#i-cap"></use></svg> Teacher</button>
+  <button id="themeBtn" class="ghost iconBtn" aria-label="Switch light and dark theme" title="Switch light and dark theme"><svg class="ic" aria-hidden="true"><use href="#i-moon"></use></svg></button>
 </header>
 
-<nav class="tabs" id="tabs">
-  <button data-tab="stats" class="on">Openings and stats</button>
-  <button data-tab="review">Game review</button>
-  <button data-tab="train">Train your mistakes</button>
-  <button data-tab="play">Play and learn</button>
+<nav class="tabs" id="tabs" aria-label="Main sections">
+  <button data-tab="stats" class="on"><svg class="ic" aria-hidden="true"><use href="#i-chart"></use></svg><span>Stats</span></button>
+  <button data-tab="review"><svg class="ic" aria-hidden="true"><use href="#i-board"></use></svg><span>Review</span></button>
+  <button data-tab="train"><svg class="ic" aria-hidden="true"><use href="#i-target"></use></svg><span>Train</span></button>
+  <button data-tab="play"><svg class="ic" aria-hidden="true"><use href="#i-play"></use></svg><span>Play</span></button>
 </nav>
 
 <main>
   <section id="empty" class="empty">
-    <h1>Import your chess.com games and see where your rating goes.</h1>
-    <p>Enter a username and press Import games. Games come from chess.com's public API, so no password is needed. Stats are worked out in your browser, and Stockfish runs on your own device to explain each mistake and turn it into a puzzle you can practise.</p>
-    <p>No chess.com account? You can still play Stockfish and learn as you go: it stops you when you make a mistake.</p>
-    <button class="primary" data-goto="play">Play and learn against Stockfish</button>
+    <div class="emptyArt" aria-hidden="true">
+      <span class="blob"></span>
+      <span class="emptyKnight"><svg class="ic" aria-hidden="true"><use href="#i-knight"></use></svg></span>
+      <span class="floatPiece p1"><svg class="ic" aria-hidden="true"><use href="#i-knight"></use></svg></span>
+      <span class="floatPiece p2"><svg class="ic" aria-hidden="true"><use href="#i-star"></use></svg></span>
+      <span class="floatPiece p3"><svg class="ic" aria-hidden="true"><use href="#i-sparkle"></use></svg></span>
+      <span class="floatBubble">Let's find your leaks!</span>
+    </div>
+    <div class="emptyCopy">
+      <span class="eyebrow"><svg class="ic" aria-hidden="true"><use href="#i-sparkle"></use></svg> Your personal chess coach</span>
+      <h1>Turn every game into a lesson.</h1>
+      <p>Import your chess.com games and Coach Knight will walk you through every mistake, turn it into a puzzle, and cheer you on while you play.</p>
+      <div class="emptyActions">
+        <button class="primary" data-goto="play"><svg class="ic" aria-hidden="true"><use href="#i-play"></use></svg> Play and learn</button>
+        <button data-act="focusImport"><svg class="ic" aria-hidden="true"><use href="#i-download"></use></svg> Import my games</button>
+      </div>
+      <ul class="emptyPerks">
+        <li><svg class="ic" aria-hidden="true"><use href="#i-check"></use></svg> No password, no server</li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-check"></use></svg> Stockfish runs on your device</li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-check"></use></svg> Puzzles from your own games</li>
+      </ul>
+    </div>
   </section>
 
   <section id="stats" hidden>
@@ -66,7 +126,7 @@
         <div class="insCtl">
           <label for="batchN" class="sr">Number of games</label>
           <select id="batchN"><option value="10">Last 10 games</option><option value="20" selected>Last 20 games</option><option value="40">Last 40 games</option><option value="100">Last 100 games</option></select>
-          <button id="batchBtn" class="primary">Analyze recent games</button>
+          <button id="batchBtn" class="primary"><svg class="ic" aria-hidden="true"><use href="#i-bolt"></use></svg> Analyze recent games</button>
         </div>
       </div>
       <div id="batchBar" class="progress" hidden><span></span></div>
@@ -133,21 +193,21 @@
         </div>
         <div class="playerBar" id="botBar"></div>
         <div class="controls">
-          <button id="bStart" aria-label="First move">|&lt;</button>
-          <button id="bPrev" aria-label="Previous move">&lt;</button>
+          <button id="bStart" aria-label="First move" title="First move"><svg class="ic" aria-hidden="true"><use href="#i-first"></use></svg></button>
+          <button id="bPrev" aria-label="Previous move" title="Previous move"><svg class="ic" aria-hidden="true"><use href="#i-left"></use></svg></button>
           <button id="bPlay" aria-label="Play or pause">Play</button>
-          <button id="bNext" aria-label="Next move">&gt;</button>
-          <button id="bEnd" aria-label="Last move">&gt;|</button>
-          <button id="bFlip">Flip board</button>
+          <button id="bNext" aria-label="Next move" title="Next move"><svg class="ic" aria-hidden="true"><use href="#i-right"></use></svg></button>
+          <button id="bEnd" aria-label="Last move" title="Last move"><svg class="ic" aria-hidden="true"><use href="#i-last"></use></svg></button>
+          <button id="bFlip"><svg class="ic" aria-hidden="true"><use href="#i-flip"></use></svg> Flip</button>
           <span class="spacer"></span>
           <label for="depth" class="sr">Engine depth</label>
           <select id="depth"><option value="12">Quick</option><option value="15" selected>Standard</option><option value="18">Deep</option></select>
-          <button id="bAnalyze" class="primary">Analyze with Stockfish</button>
+          <button id="bAnalyze" class="primary"><svg class="ic" aria-hidden="true"><use href="#i-bolt"></use></svg> Analyze</button>
         </div>
         <div class="controls tools">
-          <button id="bExplore">Explore this position</button>
-          <button id="bGuess">Guess the move</button>
-          <button id="bPlayHere">Play from here</button>
+          <button id="bExplore"><svg class="ic" aria-hidden="true"><use href="#i-search"></use></svg> Explore</button>
+          <button id="bGuess"><svg class="ic" aria-hidden="true"><use href="#i-target"></use></svg> Guess the move</button>
+          <button id="bPlayHere"><svg class="ic" aria-hidden="true"><use href="#i-play"></use></svg> Play from here</button>
           <label class="chk" for="threatsChk"><input id="threatsChk" type="checkbox"> Show threats</label>
         </div>
         <div id="progress" class="progress" hidden><div id="progressBar"></div></div>
@@ -227,7 +287,7 @@
             <div class="field"><label for="pCoach" class="flabel">Coach</label><select id="pCoach"></select></div>
             <div class="field"><label for="pClock" class="flabel">Clock</label><select id="pClock"></select></div>
             <label class="chk" for="pThreats"><input id="pThreats" type="checkbox"> Show threats on the board</label>
-            <button id="pStart" class="primary">Start a new game</button>
+            <button id="pStart" class="primary"><svg class="ic" aria-hidden="true"><use href="#i-play"></use></svg> Start a new game</button>
             <p class="muted small" style="margin:0">With a clock, yours stops while the coach checks a move, and both stop when you leave this tab.</p>
           </div>
         </div>
@@ -241,6 +301,8 @@
 </main>
 
 <div id="announce" class="sr" role="status" aria-atomic="true"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="confetti" class="confetti" aria-hidden="true"></div>
 
 <dialog id="teachDlg" class="tdlg" aria-labelledby="tdTitle">
   <form method="dialog">
@@ -277,14 +339,14 @@
 <footer class="foot">Chess Lab is not affiliated with chess.com. Data comes from the chess.com public API. Analysis by <a href="https://github.com/official-stockfish/Stockfish">Stockfish</a> 19 via <a href="https://github.com/nmrugg/stockfish.js">stockfish.js</a> (GPLv3). Pieces: cburnett set from lichess.org, GPLv2+.</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-<script src="store.js?v=13"></script>
-<script src="board.js?v=13"></script>
-<script src="engine.js?v=13"></script>
-<script src="learn.js?v=13"></script>
-<script src="app.js?v=13"></script>
-<script src="explore.js?v=13"></script>
-<script src="play.js?v=13"></script>
-<script src="teacher.js?v=13"></script>
-<script src="train.js?v=13"></script>
+<script src="store.js?v=19"></script>
+<script src="board.js?v=19"></script>
+<script src="engine.js?v=19"></script>
+<script src="learn.js?v=19"></script>
+<script src="app.js?v=19"></script>
+<script src="explore.js?v=19"></script>
+<script src="play.js?v=19"></script>
+<script src="teacher.js?v=19"></script>
+<script src="train.js?v=19"></script>
 </body>
 </html>

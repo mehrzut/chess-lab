@@ -5,7 +5,7 @@
 
 const API = 'https://api.chess.com/pub/player/';
 const BATCH_DEPTH = 12;
-const ARROW = { best: '#3d9f68', ref: '#d4483e', eng1: '#3454d1', eng2: '#7f93dd', guess: '#8a63d2', game: '#98a2b0' };
+const ARROW = { best: '#58cc02', ref: '#ff4b4b', eng1: '#1cb0f6', eng2: '#7cc7ff', guess: '#a560f0', game: '#9aa7a0' };
 const state = {
   user: '', games: [], filter: { color: 'all', tc: 'all', group: 'family', opening: null, period: 'all' }, list: { sort: 'new', result: 'all', q: '', analyzed: false },
   sortKey: 'games', sortDir: -1, sel: null, ply: 0, flip: false, review: null, token: 0, side: 'moves', timer: null, busy: null,
@@ -16,15 +16,43 @@ kv.onError = (msg) => setStatus(`Could not save to browser storage: ${msg}. New 
 /* ---------- theme ---------- */
 (function theme() {
   const t = prefs.get('theme'); if (t) document.documentElement.dataset.theme = t;
+  const paint = () => {
+    const dark = getComputedStyle(document.documentElement).colorScheme === 'dark';
+    const b = $('#themeBtn'); if (!b) return;
+    b.innerHTML = icon(dark ? 'sun' : 'moon');
+    b.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+    b.title = b.getAttribute('aria-label');
+  };
+  paint();
   $('#themeBtn').onclick = () => {
     const dark = getComputedStyle(document.documentElement).colorScheme === 'dark';
     const next = dark ? 'light' : 'dark'; document.documentElement.dataset.theme = next; prefs.set('theme', next);
+    paint();
     if (!$('#stats').hidden) renderStats(); drawEval();
   };
 })();
 
+/* ---------- progress chrome ---------- */
+function bumpStreak() {
+  const today = new Date().toISOString().slice(0, 10);
+  const s = prefs.get('streak') || { last: '', n: 0 };
+  if (s.last === today) return s;
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const next = { last: today, n: s.last === yesterday ? (s.n || 0) + 1 : 1 };
+  prefs.set('streak', next);
+  return next;
+}
+function updateHeaderStats() {
+  const streak = prefs.get('streak') || { n: 1 };
+  let solved = 0;
+  kv.keys('srs:').forEach((k) => { const s = kv.get(k); if (s && s.ok) solved++; });
+  const analyzed = state.games.filter((g) => kv.has('an2:' + g.url)).length;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('stStreak', streak.n || 1); set('stPuzzles', solved); set('stAnalyzed', analyzed);
+}
+
 /* ---------- loading ---------- */
-function setStatus(t) { $('#status').textContent = t; }
+function setStatus(t) { const el = $('#status'); el.textContent = t; el.title = t; }
 async function getJSON(url) {
   const r = await fetch(url);
   if (!r.ok) throw new Error(r.status === 404 ? 'user not found' : 'HTTP ' + r.status);
@@ -125,6 +153,7 @@ function phaseOf(fens, i) { if (i < 20) return 'opening'; return isEndgame(fens[
 
 function show() {
   annotate(state.games);
+  updateHeaderStats();
   $('#empty').hidden = true; $('#tabs').hidden = false;
   const tcs = ['all', ...new Set(state.games.map((g) => g.tc))];
   $('#fTc').innerHTML = tcs.map((t, i) => `<button data-v="${t}" class="${i ? '' : 'on'}">${t === 'all' ? 'All time controls' : t[0].toUpperCase() + t.slice(1)}</button>`).join('');
@@ -152,10 +181,17 @@ function tab(name) {
   $('#empty').hidden = !empty;
   ['stats', 'review', 'train', 'play'].forEach((t) => { $('#' + t).hidden = t !== name || empty; });
   if (empty) return;
+  if (name === 'review' && !state.sel && state.games.length) {
+    const g = listGames()[0] || state.games[state.games.length - 1];
+    if (g) openGame(g);
+  }
   if (name === 'stats') renderStats(); else if (name === 'review') drawEval(); else if (name === 'train') openTrain(); else openPlay();
 }
 $('#tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) tab(e.target.dataset.tab); });
-$('#empty').addEventListener('click', (e) => { if (e.target.closest('[data-goto="play"]')) tab('play'); });
+$('#empty').addEventListener('click', (e) => {
+  if (e.target.closest('[data-goto="play"]')) return tab('play');
+  if (e.target.closest('[data-act="focusImport"]')) { const u = $('#user'); if (u) { u.focus(); u.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }
+});
 function seg(id, key) {
   $(id).addEventListener('click', (e) => {
     if (!e.target.dataset.v) return;
@@ -279,7 +315,7 @@ function drawRating(gs) {
   const t0 = gs[0].end, t1 = gs[gs.length - 1].end || t0 + 1;
   const px = (t) => 42 + ((t - t0) / (t1 - t0 || 1)) * (w - 56);
   const py = (r) => h - 24 - ((r - lo) / (hi - lo)) * (h - 40);
-  x.font = '12px "Source Sans 3", system-ui'; x.strokeStyle = css('--line'); x.lineWidth = 1;
+  x.font = '12px "Nunito", system-ui'; x.strokeStyle = css('--line'); x.lineWidth = 1;
   for (let i = 0; i <= 3; i++) { const r = lo + ((hi - lo) * i) / 3; x.beginPath(); x.moveTo(42, py(r)); x.lineTo(w - 8, py(r)); x.stroke(); x.fillStyle = css('--muted'); x.fillText(Math.round(r), 4, py(r) + 4); }
   const colors = [css('--accent'), '#d9ac2f', '#17a99e', '#d4483e', '#8a63d2'];
   [...series].forEach(([tc, arr], i) => {
@@ -625,6 +661,7 @@ $('#bAnalyze').addEventListener('click', async () => {
   state.busy = null; $('#bAnalyze').disabled = false;
   if (!evals) { $('#progress').hidden = true; return; }
   state.review = saveAnalysis(s, evals, depth);
+  updateHeaderStats();
   $('#progress').hidden = true;
   state.side = 'summary'; renderSide(); renderGame(); renderInsights(); renderList();
 });
@@ -657,7 +694,7 @@ $('#batchBtn').addEventListener('click', async () => {
   if (ins.running) { ins.token++; return; }
   if (state.busy) { $('#batchMsg').textContent = 'The engine is busy with a single game. Try again when it finishes.'; return; }
   const n = +$('#batchN').value; const token = ++ins.token;
-  ins.running = true; state.busy = 'batch'; $('#bAnalyze').disabled = true; $('#batchBtn').textContent = 'Stop'; $('#batchBar').hidden = false;
+  ins.running = true; state.busy = 'batch'; $('#bAnalyze').disabled = true; $('#batchBtn').innerHTML = icon('x') + ' Stop'; $('#batchBar').hidden = false;
   const list = recentGames(n); let done = 0;
   try {
     for (const g of list) {
@@ -677,7 +714,8 @@ $('#batchBtn').addEventListener('click', async () => {
       saveAnalysis(s, evals, BATCH_DEPTH); renderInsights(); renderList();
     }
   } catch (err) { $('#batchMsg').textContent = err.message; }
-  ins.running = false; state.busy = null; $('#batchBtn').textContent = 'Analyze recent games'; $('#batchBar').hidden = true; $('#bAnalyze').disabled = false;
+  ins.running = false; state.busy = null; $('#batchBtn').innerHTML = icon('bolt') + ' Analyze recent games'; $('#batchBar').hidden = true; $('#bAnalyze').disabled = false;
+  updateHeaderStats();
   renderInsights();
 });
 
@@ -780,17 +818,30 @@ function setEvalBar(cp) {
 }
 function coachHtml(s, rv, ply) {
   const cp = rv.evals[ply].cp;
-  if (!ply) return `<div class="coachHead"><b>Starting position</b><span class="muted" style="margin:0">Evaluation ${evText(cp)}</span></div>`;
+  if (!ply) {
+    return coachBubble({
+      tone: 'neutral', title: 'Starting position',
+      text: `Evaluation ${evText(cp)}. Step through the moves and I'll point out the moments that mattered.`,
+      badge: '<span class="badge k-best">Ready</span>',
+    });
+  }
   const c = rv.cls[ply - 1]; const m = s.moves[ply - 1]; const ex = c.ex;
-  let head = `<span class="badge k-${c.t}">${c.label}</span>`;
-  if (ex && ex.type !== 'opp') head += `<span class="badge type">${MTYPES[ex.type].label}</span>`;
-  else if (c.missed) head += '<span class="badge k-mist">Missed tactic</span>';
-  if (ex && ex.tag) head += `<span class="badge tag">${ex.tag.label}</span>`;
-  head += `<b>${moveName(ply - 1, m.san)}</b><span class="muted" style="margin:0">Evaluation ${evText(cp)}</span>`;
-  if (ply === s.moves.length) head += `<span class="badge fin-${s.g.res}">${esc(finishText(s.g))}</span>`;
+  const tone = ['brill', 'best', 'good'].includes(c.t) ? 'good' : c.t === 'inacc' ? 'warn' : ['mist', 'blun'].includes(c.t) ? 'bad' : 'neutral';
+  let badge = `<span class="badge k-${c.t}">${c.label}</span>`;
+  if (ex && ex.type !== 'opp') badge += `<span class="badge type">${MTYPES[ex.type].label}</span>`;
+  else if (c.missed) badge += '<span class="badge k-mist">Missed tactic</span>';
+  if (ex && ex.tag) badge += `<span class="badge tag">${ex.tag.label}</span>`;
+  if (ply === s.moves.length) badge += `<span class="badge fin-${s.g.res}">${esc(finishText(s.g))}</span>`;
+  const title = moveName(ply - 1, m.san);
   if (!ex) {
-    const hint = ['inacc', 'mist', 'blun'].includes(c.t) && c.bestSan ? `<p class="why">Engine preferred ${esc(c.bestSan)} (green arrow).</p>` : '';
-    return `<div class="coachHead">${head}</div>${hint}<div class="acts">${teachBtnHtml('review')}</div>`;
+    const text = ['brill', 'best'].includes(c.t)
+      ? `Perfect — ${esc(m.san)} was the best move in the position. Evaluation ${evText(cp)}.`
+      : c.t === 'good'
+        ? `Solid — ${esc(m.san)} keeps your position healthy. Evaluation ${evText(cp)}.`
+        : ['inacc', 'mist', 'blun'].includes(c.t)
+          ? `Hmm, ${esc(m.san)} is a ${c.label.toLowerCase()}. Analyze this game again and I'll explain exactly what it allowed.${c.bestSan ? ` The engine preferred ${esc(c.bestSan)} (green arrow).` : ''}`
+          : `${esc(m.san)}. Evaluation ${evText(cp)}.`;
+    return coachBubble({ tone, title, text, badge, acts: teachBtnHtml('review') });
   }
   const mineMove = ex.type !== 'opp';
   const acts = [];
@@ -800,7 +851,8 @@ function coachHtml(s, rv, ply) {
   acts.push(teachBtnHtml('review'));
   const legend = `<span class="legend"><i class="sw sw-best"></i>better move${c.drop >= 20 ? '<i class="sw sw-ref"></i>best reply' : ''}</span>`;
   const old = mineMove && !ex.detailed ? '<p class="muted small">This game was analyzed by an older version. Analyze it again for a fuller explanation.</p>' : '';
-  return `<div class="coachHead">${head}</div><p class="why">${esc(ex.text)}${ex.tag ? ' ' + esc(ex.tag.text) : ''}</p><div class="acts">${acts.join('')}${legend}</div>${old}`;
+  const text = `${esc(ex.text)}${ex.tag ? ' ' + esc(ex.tag.text) : ''}${old}`;
+  return coachBubble({ tone, title, text, badge, acts: acts.join('') + legend });
 }
 function renderEval() {
   const s = state.sel; const rv = state.review; const coach = $('#coach');
@@ -808,7 +860,12 @@ function renderEval() {
   if (state.mode === 'guess') { setEvalBar(null); drawEval(); return; }
   if (!rv) {
     setEvalBar(null);
-    if (!$('#bAnalyze').disabled) coach.innerHTML = s ? '<span class="muted" style="margin:0">Press Analyze with Stockfish for evaluations, accuracy, and an explanation of every mistake.</span>' : '';
+    if (!$('#bAnalyze').disabled) coach.innerHTML = s ? coachBubble({
+      tone: 'neutral', title: 'Ready to review',
+      text: "Press Analyze and I'll walk you through every move — the good ones and the ones that got away.",
+      badge: '<span class="badge tag">Stockfish</span>',
+      acts: '<button data-act="analyze" class="primary">Analyze with Stockfish</button>',
+    }) : '';
     drawEval(); return;
   }
   setEvalBar(rv.evals[state.ply].cp);
@@ -816,7 +873,9 @@ function renderEval() {
   drawEval();
 }
 $('#coach').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-act]'); if (!b || !state.review || !state.ply) return;
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  if (b.dataset.act === 'analyze') { const btn = $('#bAnalyze'); if (btn && !btn.disabled) btn.click(); return; }
+  if (!state.review || !state.ply) return;
   const s = state.sel; const i = state.ply - 1; const ex = state.review.cls[i].ex; if (!ex) return;
   if (b.dataset.act === 'ref') startExplore(s.fens[i + 1], ex.refUci, 1, s.moves[i], ex.type === 'opp' ? 'The best answer' : 'Their best reply');
   else if (b.dataset.act === 'best') startExplore(s.fens[i], ex.bestUci, 1, s.moves[i - 1], 'The better move');
@@ -825,7 +884,7 @@ $('#coach').addEventListener('click', (e) => {
 function drawEval() {
   const c = $('#evalChart'); if (!c.clientWidth) return; const { x, w, h } = fitCanvas(c); x.clearRect(0, 0, w, h);
   const rv = state.review;
-  if (!rv) { x.fillStyle = css('--muted'); x.font = '14px "Source Sans 3", system-ui'; x.fillText('Analyze the game to see how the evaluation moved.', 4, 26); return; }
+  if (!rv) { x.fillStyle = css('--muted'); x.font = '14px "Nunito", system-ui'; x.fillText('Analyze the game to see how the evaluation moved.', 4, 26); return; }
   const n = rv.evals.length; const px = (i) => 4 + (i / (n - 1 || 1)) * (w - 8); const py = (cp) => h - (winPct(cp) / 100) * h;
   const upto = state.mode === 'guess' ? state.ply : n - 1; // guessing: do not show the future
   const ev = rv.evals.slice(0, upto + 1);
@@ -860,9 +919,10 @@ $('#notesBox').addEventListener('input', () => { if (state.sel) kv.set('note:' +
 /* ---------- start: reopen the last username from storage, or from ?u=name ---------- */
 async function boot() {
   await kv.ready;
+  bumpStreak();
   const q = new URLSearchParams(location.search).get('u');
   const user = (q || prefs.get('user') || '').toLowerCase();
-  if (!user) return;
+  if (!user) { updateHeaderStats(); return; }
   $('#user').value = user;
   const cached = kv.get('games:' + user);
   if (cached && cached.games && cached.games.length) {

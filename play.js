@@ -13,6 +13,7 @@ const pl = {
   phase: 'idle', log: [], pre: null, preFen: null, preVal: null, tok: 0, flag: null, hint: 0, retry: false,
   counts: { flagged: 0, corrected: 0, kept: 0, helped: 0, hints: 0 }, msg: '', result: null, armed: false,
   tcPick: '0+0', tc: null, clock: { w: 0, b: 0 }, run: null, since: 0, ticker: null,
+  say: '', sayTone: 'neutral',
 };
 const levelName = (elo) => (elo ? `Stockfish ${elo}` : 'Stockfish (full strength)');
 const sideName = (c) => (c === 'w' ? 'White' : 'Black');
@@ -41,11 +42,11 @@ const sideName = (c) => (c === 'w' ? 'White' : 'Black');
   $('#pStart').addEventListener('click', () => {
     // a game in progress needs a second click, so one stray tap does not throw it away
     if (pl.ch && pl.phase !== 'over' && pl.log.length && !pl.armed) {
-      pl.armed = true; $('#pStart').textContent = 'Click again to abandon this game';
-      setTimeout(() => { pl.armed = false; $('#pStart').textContent = 'Start a new game'; }, 3000);
+      pl.armed = true; $('#pStart').innerHTML = icon('x') + ' Click again to abandon this game';
+      setTimeout(() => { pl.armed = false; $('#pStart').innerHTML = icon('play') + ' Start a new game'; }, 3000);
       return;
     }
-    pl.armed = false; $('#pStart').textContent = 'Start a new game';
+    pl.armed = false; $('#pStart').innerHTML = icon('play') + ' Start a new game';
     startPlay({});
   });
 })();
@@ -77,6 +78,8 @@ function startPlay(opts) {
   pl.pre = null; pl.preFen = null; pl.preVal = null;
   pl.counts = { flagged: 0, corrected: 0, kept: 0, helped: 0, hints: 0 };
   pl.msg = opts.fen ? 'Playing on from the position in game review.' : '';
+  pl.say = opts.fen ? "Let's pick up from here. I'll stop you if a move goes wrong." : "Let's go! I'm watching every move. Take your time and look for checks, captures and threats.";
+  pl.sayTone = 'good';
   saveGame(); next();
 }
 function next() {
@@ -107,16 +110,29 @@ async function onPlayMove(mv) {
   const drop = uci === pre.best ? 0 : Math.max(0, winPct(pre.cp * sg) - winPct(post.cp * sg));
   const c = clsOf(drop); const label = c[1] === 'best' && uci !== pre.best ? 'Excellent' : c[3];
   const entry = { uci, san: r.san, from: r.from, to: r.to, t: c[1], sym: c[2], label, drop };
-  if (drop >= pl.coach && ['inacc', 'mist', 'blun'].includes(c[1])) {
-    let ex = null;
+  // the coach explains every move worth mentioning, even when it is set to only label moves
+  let ex = null;
+  if (drop >= 10) {
     try { ex = explainMove({ moves: [r], fens: [before, pl.ch.fen()], clocks: [], spent: [], base: null }, [pre, post], 0, drop, null); } catch (_) { ex = null; }
+  }
+  if (drop >= pl.coach && ['inacc', 'mist', 'blun'].includes(c[1])) {
     pl.flag = { entry, ex, before, pre, post, better: false }; pl.counts.flagged++; pl.phase = 'flagged';
+    pl.say = hintText(pl.flag); pl.sayTone = 'bad';
     teachNote('flag', { type: ex ? ex.type : 'other', cls: c[1] });
     drawPlay(); announce(`${label}: ${r.san}. ${hintText(pl.flag)}`);
     return;
   }
+  pl.say = coachPraise(entry, ex);
+  pl.sayTone = ['best', 'brill', 'good'].includes(c[1]) ? 'good' : c[1] === 'inacc' ? 'warn' : ['mist', 'blun'].includes(c[1]) ? 'bad' : 'neutral';
   pl.msg = `${label}: ${r.san}.`;
   commitMine(entry);
+}
+function coachPraise(e, ex) {
+  if (e.t === 'best' || e.t === 'brill') return `Perfect! ${e.san} is exactly what I wanted.`;
+  if (e.t === 'good') return `Nice — ${e.san} keeps your position solid.`;
+  if (e.t === 'inacc') return `Careful — ${e.san} is a little loose.${ex ? ' ' + ex.text : ' There was something sharper here.'}`;
+  if (e.t === 'mist' || e.t === 'blun') return `That one hurts — ${e.san} is a ${e.label.toLowerCase()}.${ex ? ' ' + ex.text : ''}`;
+  return `${e.san}. ${e.label}.`;
 }
 function commitMine(entry) {
   if (pl.retry && entry.t && !['inacc', 'mist', 'blun'].includes(entry.t)) pl.counts.corrected++;
@@ -162,18 +178,22 @@ async function engineTurn() {
 /* ---------- actions ---------- */
 function takeBackFlagged() { // undo the flagged move and try again from the same position
   pl.ch.undo(); pl.flag = null; pl.retry = true; pl.hint = 0; pl.phase = 'you';
-  pl.msg = 'Try another move.'; startClock(pl.color); drawPlay();
+  pl.msg = 'Try another move.';
+  pl.say = 'No problem — take your time and try again.'; pl.sayTone = 'neutral';
+  startClock(pl.color); drawPlay();
 }
 function playBetter() {
   const f = pl.flag; pl.ch.undo();
   const u = f.pre.best; const mv = pl.ch.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] || undefined });
   pl.counts.helped++; pl.retry = false;
   pl.msg = `You played the engine's move, ${mv.san}.`;
+  pl.say = 'Good choice. This is the move I wanted.'; pl.sayTone = 'good';
   commitMine({ uci: u, san: mv.san, from: mv.from, to: mv.to, t: 'best', sym: CLS[0][2], label: 'Best', drop: 0, helped: true });
 }
 function keepMove() {
   const f = pl.flag; pl.counts.kept++; pl.retry = false;
   pl.msg = `You kept ${f.entry.san} (${f.entry.label.toLowerCase()}).`;
+  pl.say = "Okay, your call. Let's see how it plays out."; pl.sayTone = 'neutral';
   commitMine({ ...f.entry, kept: true });
 }
 function takeBackTurn() { // during your turn: undo Stockfish's last move and your move before it
@@ -181,7 +201,9 @@ function takeBackTurn() { // during your turn: undo Stockfish's last move and yo
   pl.tok++; stopClock();
   let undone = 0;
   while (pl.log.length && undone < 2) { const e = pl.log.pop(); pl.ch.undo(); undone++; if (e.mine) break; }
-  pl.flag = null; pl.retry = false; pl.msg = 'Took back your last move.'; saveGame(); next();
+  pl.flag = null; pl.retry = false; pl.msg = 'Took back your last move.';
+  pl.say = 'Fresh start — you have got this.'; pl.sayTone = 'neutral';
+  saveGame(); next();
 }
 /* kind: 'resign', or 'time' with the side whose clock ran out; otherwise read the board */
 function finish(kind, side) {
@@ -197,9 +219,12 @@ function finish(kind, side) {
   else if (ch.in_checkmate()) { res = ch.turn() === pl.color ? 'L' : 'W'; how = 'Checkmate'; }
   else { res = 'D'; how = ch.in_stalemate() ? 'Stalemate' : ch.in_threefold_repetition() ? 'Repetition' : ch.insufficient_material() ? 'Insufficient material' : '50-move rule'; }
   pl.result = { res, how };
+  pl.say = res === 'W' ? `You won by ${how.toLowerCase()}! Brilliant work.` : res === 'L' ? `You lost by ${how.toLowerCase()}. Let's review it and find the turning point.` : `A draw by ${how.toLowerCase()}. Solid result.`;
+  pl.sayTone = res === 'W' ? 'good' : res === 'L' ? 'bad' : 'neutral';
+  if (res === 'W') celebrate();
   const mine = pl.log.filter((e) => e.mine && e.t);
   if (mine.length) teachNote('game', { res, flagged: pl.counts.flagged, corrected: pl.counts.corrected, kept: pl.counts.kept, acc: Math.round(mine.reduce((a, e) => a + moveAcc(e.drop), 0) / mine.length) });
-  kv.del('play:current'); drawPlay();
+  kv.del('play:current'); drawPlay(); updateHeaderStats();
   announce(res === 'W' ? `You won by ${how.toLowerCase()}.` : res === 'L' ? `You lost by ${how.toLowerCase()}.` : `Draw by ${how.toLowerCase()}.`);
 }
 /* opens the finished (or current) game in Game review, where it can be analyzed like any other */
@@ -226,7 +251,7 @@ function restoreGame() {
   const g = kv.get('play:current'); if (!g) return;
   const ch = new Chess(g.startFen);
   for (const e of g.log) { if (!ch.move({ from: e.uci.slice(0, 2), to: e.uci.slice(2, 4), promotion: e.uci[4] || undefined })) return; }
-  Object.assign(pl, { ch, startFen: g.startFen, color: g.color, elo: g.elo, coach: g.coach, log: g.log, counts: g.counts, tc: g.tc || null, clock: g.clock || { w: 0, b: 0 }, msg: 'Picked up your game where you left it.' });
+  Object.assign(pl, { ch, startFen: g.startFen, color: g.color, elo: g.elo, coach: g.coach, log: g.log, counts: g.counts, tc: g.tc || null, clock: g.clock || { w: 0, b: 0 }, msg: 'Picked up your game where you left it.', say: 'Picked up your game where you left it. Your move.', sayTone: 'good' });
   $('#pLevel').value = String(g.elo); $('#pCoach').value = String(g.coach);
   next();
 }
@@ -237,15 +262,21 @@ function playMarks(fen) {
   const marks = {}; loosePieces(fen).forEach((x) => { marks[x.sq] = x.color === pl.color ? 'risk' : 'loose'; }); return marks;
 }
 function drawPlay() {
-  $('#pStart').textContent = pl.armed ? 'Click again to abandon this game' : 'Start a new game';
+  $('#pStart').innerHTML = pl.armed ? icon('x') + ' Click again to abandon this game' : icon('play') + ' Start a new game';
   if (!pl.board) return;
   const ch = pl.ch; const card = $('#pCard');
   if (!ch) {
     pl.board.set({ fen: START_FEN, flip: pl.side === 'b' });
     $('#pTop').innerHTML = $('#pBot').innerHTML = ''; $('#pMoves').innerHTML = '';
-    card.innerHTML = `<h2>How it works</h2><p>You play Stockfish at the strength you pick. After each of your moves, a full-strength engine checks it.</p>
-      <p>If the move is a mistake, the game pauses. You see what it allows and can <b>take it back and try again</b>, <b>see the better move</b>, or <b>keep it</b> and play on.</p>
-      <p class="muted" style="margin:0">Choose a side, the opponent's strength and how strict the coach should be, then start. You can also press Play from here in Game review to play on from any position.</p>`;
+    card.innerHTML = `${coachBubble({
+      tone: 'good', title: "Hi, I'm Coach Knight",
+      text: "I'll watch every move and tell you what I see. Pick a side, a level and how strict I should be, then let's play.",
+      badge: '<span class="badge k-best">Ready</span>',
+    })}<div class="howItWorks">
+      <p><b>You play, I check.</b> A full-strength engine looks at every move you make.</p>
+      <p><b>Mistake? I stop you.</b> Take it back and try again, see the better move, or keep it and carry on.</p>
+      <p class="muted small">You can also press Play from here in Game review to play on from any position.</p>
+    </div>`;
     return;
   }
   const flip = pl.color === 'b'; const lastE = pl.log[pl.log.length - 1];
@@ -288,40 +319,74 @@ function drawPlay() {
   card.innerHTML = cardHtml(); teachSync();
   if (pl.phase === 'you') { const inp = $('#pMove'); if (inp && document.activeElement && document.activeElement.id === 'pMove') inp.focus(); }
 }
+function sessionHtml(acc) {
+  const c = pl.counts; const moves = pl.log.filter((e) => e.mine).length;
+  return `<div class="sessionStats">
+    <span class="sstat"><b>${acc != null ? acc + '%' : '—'}</b><span>accuracy</span></span>
+    <span class="sstat"><b>${c.flagged}</b><span>coach saves</span></span>
+    <span class="sstat"><b>${c.corrected}</b><span>fixed yourself</span></span>
+    <span class="sstat"><b>${moves}</b><span>your moves</span></span>
+    <div class="meter accMeter" aria-hidden="true"><i style="width:${acc != null ? acc : 0}%"></i></div>
+  </div>`;
+}
 function cardHtml() {
   const c = pl.counts; const mine = pl.log.filter((e) => e.mine && e.t);
   const acc = mine.length ? Math.round(mine.reduce((a, e) => a + moveAcc(e.drop), 0) / mine.length) : null;
   const head = `<div class="exHead"><span class="modeTag">Play</span><b>You are ${sideName(pl.color)} against ${esc(levelName(pl.elo))}</b></div>`;
-  if (pl.phase === 'error') return `${head}<p>${esc(pl.msg)}</p><div class="acts"><button data-act="retryEngine" class="primary">Try again</button></div>`;
+  if (pl.phase === 'error') {
+    return `${head}${coachBubble({ tone: 'bad', title: 'Something went wrong', text: esc(pl.msg), acts: '<button data-act="retryEngine" class="primary">Try again</button>' })}`;
+  }
   if (pl.phase === 'over') {
     const r = pl.result; const verdict = r.res === 'W' ? 'You won' : r.res === 'L' ? 'You lost' : 'Draw';
+    const tone = r.res === 'W' ? 'good' : r.res === 'L' ? 'bad' : 'neutral';
+    const title = r.res === 'W' ? 'Brilliant!' : r.res === 'L' ? 'Tough one.' : 'Well played.';
+    const text = r.res === 'W'
+      ? `You won by ${esc(r.how.toLowerCase())}. Great fight — let's see what worked.`
+      : r.res === 'L'
+        ? `You lost by ${esc(r.how.toLowerCase())}. Every loss is a lesson — let's find the turning point.`
+        : `A draw by ${esc(r.how.toLowerCase())}. Solid result.`;
     const tiles = [[acc != null ? acc + '%' : '-', 'your accuracy'], [c.flagged, 'times the coach stopped you'], [c.corrected, 'fixed on your own'], [c.kept, 'mistakes you kept']];
-    return `${head}<p class="big verdict"><span class="badge fin-${r.res}">${verdict}</span><span>by ${esc(r.how.toLowerCase())}.</span></p>
-      <div class="tiles small">${tiles.map(([b, t]) => `<div class="tile"><b>${b}</b><span>${t}</span></div>`).join('')}</div>
-      ${c.helped || c.hints ? `<p class="muted">You asked for ${c.hints} hint${c.hints === 1 ? '' : 's'} and played the coach's move ${c.helped} time${c.helped === 1 ? '' : 's'}.</p>` : ''}
-      <div class="acts"><button data-act="review" class="primary">Review this game</button><button data-act="again">Play again</button></div>`;
+    return `${head}${coachBubble({
+      tone, title, text, badge: `<span class="badge fin-${r.res}">${verdict}</span>`,
+      acts: '<button data-act="review" class="primary">Review this game</button><button data-act="again">Play again</button>',
+    })}${sessionHtml(acc)}<div class="tiles small">${tiles.map(([b, t]) => `<div class="tile"><b>${b}</b><span>${t}</span></div>`).join('')}</div>
+      ${c.helped || c.hints ? `<p class="muted" style="margin:0">You asked for ${c.hints} hint${c.hints === 1 ? '' : 's'} and played the coach's move ${c.helped} time${c.helped === 1 ? '' : 's'}.</p>` : ''}`;
   }
-  if (pl.phase === 'checking') return `${head}<p><span class="spin" aria-hidden="true"></span>Checking your move...</p>`;
-  if (pl.phase === 'thinking') return `${head}<p class="muted">${esc(pl.msg)}</p><p><span class="spin" aria-hidden="true"></span>Stockfish is thinking...</p>`;
+  if (pl.phase === 'checking') {
+    return `${head}${coachBubble({ tone: 'neutral', title: 'Checking...', text: '<span class="spin" aria-hidden="true"></span> Let me look at that move.' })}${sessionHtml(acc)}`;
+  }
+  if (pl.phase === 'thinking') {
+    return `${head}${coachBubble({ tone: 'neutral', title: 'Stockfish is thinking', text: '<span class="spin" aria-hidden="true"></span> Your opponent is choosing a move. Breathe, then look for checks, captures and threats.' })}${sessionHtml(acc)}`;
+  }
   if (pl.phase === 'flagged') {
     const f = pl.flag; const e = f.entry;
     const type = f.ex && MTYPES[f.ex.type] ? `<span class="badge type">${MTYPES[f.ex.type].label}</span>` : '';
     if (!f.better) {
-      return `${head}<div class="badges"><span class="badge k-${e.t}">${e.label}</span>${type}</div>
-        <p class="big">Wait: ${esc(e.san)} is a ${e.label.toLowerCase()}.</p><p class="why">${esc(hintText(f))}</p>
-        <div class="acts"><button data-act="retry" class="primary">Take it back and try again</button><button data-act="better">Show the better move</button><button data-act="keep">Keep my move</button>${teachBtnHtml('play')}</div>`;
+      return `${head}${coachBubble({
+        tone: 'bad', title: `Hold on — ${esc(e.san)} is a ${e.label.toLowerCase()}`,
+        text: esc(hintText(f)), badge: `<span class="badge k-${e.t}">${e.label}</span>${type}`,
+        acts: `<button data-act="retry" class="primary">Take it back and try again</button><button data-act="better">Show the better move</button><button data-act="keep">Keep my move</button>${teachBtnHtml('play')}`,
+      })}${sessionHtml(acc)}`;
     }
-    const tip = f.ex && MTYPES[f.ex.type] ? `<p class="muted">${esc(MTYPES[f.ex.type].tip)}</p>` : '';
-    return `${head}<div class="badges"><span class="badge k-${e.t}">${e.label}</span>${type}</div>
-      <p class="big">Better was ${esc(f.ex && f.ex.bestSan ? f.ex.bestSan : f.pre.best)} (green arrow).</p>
-      ${f.ex ? `<p class="why">${esc(f.ex.text)}</p>${f.ex.bestLine ? `<p><b>Best line:</b> ${esc(f.ex.bestLine)}</p>` : ''}` : ''}${tip}
-      <div class="acts"><button data-act="playBetter" class="primary">Play the better move</button><button data-act="retry">Try again myself</button><button data-act="keep">Keep my move</button>${teachBtnHtml('play')}</div>`;
+    const tip = f.ex && MTYPES[f.ex.type] ? `<p class="muted small">${esc(MTYPES[f.ex.type].tip)}</p>` : '';
+    const best = esc(f.ex && f.ex.bestSan ? f.ex.bestSan : f.pre.best);
+    const line = f.ex && f.ex.bestLine ? `<p class="small"><b>Best line:</b> ${esc(f.ex.bestLine)}</p>` : '';
+    return `${head}${coachBubble({
+      tone: 'warn', title: `Better was ${best} (green arrow)`,
+      text: `${f.ex ? esc(f.ex.text) : 'This was the stronger choice.'}${line}${tip}`,
+      badge: `<span class="badge k-${e.t}">${e.label}</span>${type}`,
+      acts: `<button data-act="playBetter" class="primary">Play the better move</button><button data-act="retry">Try again myself</button><button data-act="keep">Keep my move</button>${teachBtnHtml('play')}`,
+    })}${sessionHtml(acc)}`;
   }
   // your turn
   const hintBtn = pl.hint >= 2 ? '' : `<button data-act="hint">${pl.hint ? 'Show the move' : 'Hint'}</button>`;
-  const hintMsg = pl.hint && !pl.preVal ? '<p class="muted"><span class="spin" aria-hidden="true"></span>Working out a hint...</p>' : pl.hint === 1 ? '<p class="muted">The highlighted piece is the one to move.</p>' : '';
-  return `${head}${pl.msg ? `<p class="muted">${esc(pl.msg)}</p>` : ''}
-    <p class="big">${pl.retry ? 'Find a better move.' : 'Your move.'}</p>${hintMsg}
+  const hintMsg = pl.hint && !pl.preVal ? '<p class="muted small"><span class="spin" aria-hidden="true"></span>Working out a hint...</p>' : '';
+  return `${head}${coachBubble({
+    tone: pl.retry ? 'warn' : 'good',
+    title: pl.retry ? 'Find a better move' : 'Your move',
+    text: esc(pl.say || 'Look for checks, captures and threats before you choose.'),
+    badge: pl.hint ? '<span class="badge tag">Hint on</span>' : '',
+  })}${sessionHtml(acc)}${pl.msg ? `<p class="playMsg">${esc(pl.msg)}</p>` : ''}${hintMsg}
     ${moveFormHtml('pMove')}${pl.typedErr ? `<p class="muted small">${esc(pl.typedErr)}</p>` : ''}
     <div class="acts">${hintBtn}<button data-act="undo"${pl.log.some((e) => e.mine) ? '' : ' disabled'}>Take back</button><button data-act="resign">Resign</button></div>`;
 }
@@ -333,7 +398,11 @@ $('#pCard').addEventListener('click', (e) => {
   else if (act === 'better' && pl.phase === 'flagged') { pl.flag.better = true; drawPlay(); announce(`Better was ${pl.flag.ex && pl.flag.ex.bestSan ? pl.flag.ex.bestSan : pl.flag.pre.best}.`); }
   else if (act === 'playBetter' && pl.phase === 'flagged') playBetter();
   else if (act === 'keep' && pl.phase === 'flagged') keepMove();
-  else if (act === 'hint' && pl.phase === 'you') { pl.hint++; if (pl.hint === 1) pl.counts.hints++; drawPlay(); }
+  else if (act === 'hint' && pl.phase === 'you') {
+    pl.hint++; if (pl.hint === 1) pl.counts.hints++;
+    pl.say = pl.hint === 1 ? 'Look at the highlighted piece — that is the one I would move.' : 'Here is the move I had in mind (green arrow).';
+    pl.sayTone = 'warn'; drawPlay();
+  }
   else if (act === 'undo') takeBackTurn();
   else if (act === 'resign' && pl.phase === 'you') finish('resign');
   else if (act === 'review') reviewPlayed();

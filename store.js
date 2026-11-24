@@ -7,11 +7,59 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
-/* one polite status message for screen readers (puzzle and guess results) */
-function announce(text) { const el = document.getElementById('announce'); if (!el) return; el.textContent = ''; setTimeout(() => { el.textContent = text; }, 30); }
+const icon = (name, cls = '') => `<svg class="ic${cls ? ' ' + cls : ''}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+
+/* one polite status message for screen readers, plus a friendly toast for everyone else */
+let toastTimer = null;
+function announce(text) {
+  const el = document.getElementById('announce');
+  if (el) { el.textContent = ''; setTimeout(() => { el.textContent = text; }, 30); }
+  const t = document.getElementById('toast');
+  if (!t || /^Stockfish played|^The teacher says|^Teacher:/.test(text)) return;
+  t.textContent = text.length > 150 ? text.slice(0, 147) + '...' : text;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3400);
+}
+
+/* Coach Knight's speech bubble, shared by Game review, Play and Train. */
+function coachBubble(o = {}) {
+  const tone = o.tone || 'neutral';
+  const badge = o.badge ? `<span class="coachBadge">${o.badge}</span>` : '';
+  const title = o.title ? `<p class="coachTitle">${o.title}</p>` : '';
+  const text = o.text ? `<p class="coachSay">${o.text}</p>` : '';
+  const acts = o.acts ? `<div class="coachActs">${o.acts}</div>` : '';
+  return `<div class="coachCard tone-${tone}">
+    <div class="coachAvatar" aria-hidden="true">${icon('knight')}</div>
+    <div class="coachBody">
+      <div class="coachTop"><span class="coachName">Coach Knight</span>${badge}</div>
+      ${title}${text}${acts}
+    </div>
+  </div>`;
+}
+
+/* A short, reduced-motion-safe confetti burst for wins and solved puzzles. */
+function celebrate() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const layer = document.getElementById('confetti');
+  if (!layer) return;
+  const colors = ['#58cc02', '#1cb0f6', '#ff9600', '#a560f0', '#ffc800', '#ff4b4b'];
+  for (let i = 0; i < 30; i++) {
+    const bit = document.createElement('i');
+    bit.className = 'confetti-bit';
+    bit.style.setProperty('--x', (4 + Math.random() * 92) + '%');
+    bit.style.setProperty('--c', colors[i % colors.length]);
+    bit.style.setProperty('--r', (Math.random() * 360) + 'deg');
+    bit.style.setProperty('--d', (1 + Math.random() * 0.8) + 's');
+    bit.style.setProperty('--delay', (Math.random() * 0.18) + 's');
+    bit.style.setProperty('--drift', ((Math.random() * 2 - 1) * 90) + 'px');
+    layer.appendChild(bit);
+  }
+  setTimeout(() => { layer.innerHTML = ''; }, 2400);
+}
 
 /* settings that stay in localStorage (everything else under chesslab: moves to IndexedDB) */
-const PREF_KEYS = ['theme', 'user', 'threats', 'play', 'teacher'];
+const PREF_KEYS = ['theme', 'user', 'threats', 'play', 'teacher', 'streak'];
 const prefs = {
   get(k) { try { return JSON.parse(localStorage.getItem('chesslab:' + k)); } catch (_) { return null; } },
   set(k, v) { try { localStorage.setItem('chesslab:' + k, JSON.stringify(v)); return true; } catch (_) { return false; } },

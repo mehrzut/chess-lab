@@ -561,9 +561,9 @@ function renderPanel(p, where, cv, ctx) {
   if (msgs.includes('class="mvx"')) foot.push('Moves with a dotted underline were not checked: click one to check it.');
   else if (where === 'review' && msgs.includes('class="mvc"')) foot.push('Click a move in an answer to step through its line.');
   p.innerHTML = `
-    <div class="teachHead"><span class="modeTag">Teacher</span><b>${esc(ctx.label)}</b>${ctx.hideBest ? '<span class="badge tag">Hint mode</span>' : ''}
+    <div class="teachHead"><span class="teacherAvatar" aria-hidden="true">${icon('cap')}</span><span class="modeTag">Teacher</span><b>${esc(ctx.label)}</b>${ctx.hideBest ? '<span class="badge tag">Hint mode</span>' : ''}
       <span class="tWho">${esc(sready(c, c.main) ? sname(c, c.main) : sready(c, c.backup) ? sname(c, c.backup) : 'Not set up')}</span>
-      <span class="tEnd"><button type="button" class="ghost" data-t="settings">Settings</button><button type="button" class="ghost" data-t="close" aria-label="Close the teacher">Close</button></span></div>
+      <span class="tEnd"><button type="button" class="ghost" data-t="settings">${icon('gear')} Settings</button><button type="button" class="ghost" data-t="close" aria-label="Close the teacher">${icon('x')} Close</button></span></div>
     <div class="tLog">${msgs}</div>
     ${cv.status ? `<p class="tStatus"><span class="spin" aria-hidden="true"></span>${esc(cv.status)}</p>` : ''}
     ${cv.err ? `<div class="tErr" role="alert"><p>${esc(cv.err)}</p><div class="acts"><button type="button" data-t="retry">Try again</button><button type="button" data-t="settings">Teacher settings</button></div></div>` : ''}
@@ -685,7 +685,7 @@ $('#pCard').addEventListener('click', (e) => { if (e.target.closest('[data-act="
 function teachBtnHtml(where) {
   const ctx = teachCtx(where); const cv = ctx && teach.convos.get(ctx.id);
   const open = cv && cv.open; const has = cv && cv.msgs.length;
-  return `<button data-act="teach" class="teachBtn"${open ? ' aria-expanded="true"' : ''}>${has ? (open ? 'Teacher is open below' : 'Back to the teacher') : 'Ask the teacher'}</button>`;
+  return `<button data-act="teach" class="teachBtn"${open ? ' aria-expanded="true"' : ''}>${icon('cap')} ${has ? (open ? 'Teacher is open below' : 'Back to the teacher') : 'Ask the teacher'}</button>`;
 }
 
 /* ---------- settings dialog ---------- */

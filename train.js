@@ -47,6 +47,7 @@ function nextPuzzle() {
 function record(outcome) {
   if (tr.recorded || !tr.cur) return; tr.recorded = true;
   srsRecord(tr.cur.id, outcome); tr.session.n++; if (outcome !== 'fail') tr.session.ok++;
+  if (typeof updateHeaderStats === 'function') updateHeaderStats();
 }
 
 async function onTrainMove(mv) {
@@ -66,7 +67,7 @@ async function onTrainMove(mv) {
 function solved(san, drop) {
   record(tr.hint ? 'hint' : 'ok');
   tr.phase = 'solved'; tr.msg = drop > 0 ? `${san} works too: it is about as good as the engine's ${tr.cur.bestSan}.` : `${san} is the engine's move.`;
-  tr.view = null; drawTrain(); announce('Solved. ' + tr.msg);
+  tr.view = null; drawTrain(); celebrate(); announce('Solved. ' + tr.msg);
 }
 function wrong(r, why) {
   record('fail');
@@ -90,16 +91,20 @@ function drawTrain() {
   if (!tr.all.length) {
     tr.board.set({ fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' });
     $('#tMeta').innerHTML = '';
-    card.innerHTML = `<h2>No puzzles yet</h2><p>Every mistake and blunder you make becomes a puzzle here once the game is analyzed.</p>
-      <p class="muted" style="margin:0">Go to Openings and stats and press Analyze recent games, or analyze a single game in Game review.</p>`;
+    card.innerHTML = coachBubble({
+      tone: 'neutral', title: 'No puzzles yet',
+      text: 'Every mistake and blunder you make becomes a puzzle here once the game is analyzed.',
+      badge: '<span class="badge tag">Train</span>',
+      acts: '<button data-act="goStats" class="primary">Analyze my games</button>',
+    });
     return;
   }
   if (!p) {
     tr.board.set({ fen: '8/8/8/8/8/8/8/8 w - - 0 1' });
     $('#tMeta').innerHTML = '';
     card.innerHTML = tr.filter === 'due'
-      ? `<h2>All done for now</h2><p>No puzzles are due. Come back tomorrow, or practise anyway.</p><div class="acts"><button data-act="all" class="primary">Practise all puzzles</button></div>`
-      : '<h2>Nothing matches</h2><p>No puzzles match this filter. Pick another mistake type.</p>';
+      ? coachBubble({ tone: 'good', title: 'All done for now', text: 'No puzzles are due. Come back tomorrow, or practise anyway.', badge: '<span class="badge k-best">Nice work</span>', acts: '<button data-act="all" class="primary">Practise all puzzles</button>' })
+      : coachBubble({ tone: 'neutral', title: 'Nothing matches', text: 'No puzzles match this filter. Pick another mistake type.' });
     return;
   }
   const side = p.color === 'w' ? 'White' : 'Black';
@@ -113,31 +118,41 @@ function drawTrain() {
   const st = srsOf(p.id);
   const seen = !st ? 'new puzzle' : st.box >= 4 ? 'mastered' : `practised ${st.n} time${st.n === 1 ? '' : 's'}`;
   $('#tMeta').innerHTML = `<b>${esc(p.opening)}</b><span class="muted" style="margin:0">Move ${p.moveNo} vs ${esc(p.opp)} · ${new Date(p.end * 1000).toLocaleDateString()} · ${seen}</span>`;
-  const badge = `<span class="badge k-${p.t}">${p.label} in the game</span> <span class="badge type">${MTYPES[p.type] ? MTYPES[p.type].label : ''}</span>`;
-  let body;
+  const badges = `<span class="badge k-${p.t}">${p.label} in the game</span> <span class="badge type">${MTYPES[p.type] ? MTYPES[p.type].label : ''}</span>`;
+  const sess = tr.session.n ? `<div class="sessionStats"><span class="sstat"><b>${tr.session.ok}/${tr.session.n}</b><span>solved this session</span></span><div class="meter accMeter" aria-hidden="true"><i style="width:${pct(tr.session.ok, tr.session.n)}%"></i></div></div>` : '';
+  let bubble, body;
   if (ask || tr.phase === 'checking' || tr.phase === 'wrong') {
-    body = `<p class="big">${side} to move. Find a better move than the one you played.</p>
+    const tone = tr.phase === 'wrong' ? 'bad' : 'neutral';
+    const title = tr.phase === 'wrong' ? 'Not quite' : tr.phase === 'checking' ? 'Checking...' : 'Your turn';
+    const text = tr.phase === 'checking'
+      ? '<span class="spin" aria-hidden="true"></span> Let me check that move.'
+      : tr.phase === 'wrong' ? esc(tr.msg) : `Find a better move than ${esc(p.played)}, the move you played in the game.`;
+    bubble = coachBubble({ tone, title, text, badge: badges });
+    body = `${sess}<p class="big">${side} to move.</p>
       <p class="muted" style="margin:0 0 .6rem">In the game you played ${esc(p.played)} here.</p>
-      ${tr.phase === 'checking' ? '<p><span class="spin" aria-hidden="true"></span>Checking your move...</p>'
-        : tr.msg ? `<p class="verdict">${tr.phase === 'wrong' ? '<span class="badge k-blun">Not it</span>' : ''}<span>${esc(tr.msg)}</span></p>` : ''}
       ${moveFormHtml('tMove', !ask)}
       <div class="acts"><button data-act="hint"${tr.hint || !ask ? ' disabled' : ''}>Hint</button><button data-act="show"${ask ? '' : ' disabled'}>Show the answer</button><button data-act="skip">Skip</button></div>`;
   } else {
-    const head = tr.phase === 'solved'
-      ? `<p class="big verdict"><span class="badge k-best">Solved</span><span>${esc(tr.msg)}</span></p>`
-      : `<p class="big verdict"><span class="badge tag">Answer</span><span>The best move was ${esc(p.bestSan)}.</span></p>`;
-    body = `${head}<p><b>Best line:</b> ${esc(p.bestLine)}</p>
+    const won = tr.phase === 'solved';
+    bubble = coachBubble({
+      tone: won ? 'good' : 'warn',
+      title: won ? 'Solved!' : 'Here is the answer',
+      text: won ? esc(tr.msg) : `The best move was ${esc(p.bestSan)}.`,
+      badge: won ? '<span class="badge k-best">Solved</span>' : '<span class="badge tag">Answer</span>',
+    });
+    body = `${sess}<p><b>Best line:</b> ${esc(p.bestLine)}</p>
       <p><b>What went wrong in the game:</b> you played ${esc(p.played)} (red arrow). ${esc(p.text)}</p>
       <p class="muted">${MTYPES[p.type] ? esc(MTYPES[p.type].tip) : ''}</p>
       <div class="acts"><button data-act="next" class="primary">Next puzzle</button><button data-act="open">Open in game review</button></div>`;
   }
-  card.innerHTML = `<div class="badges">${badge}</div>${body}`;
+  card.innerHTML = `${bubble}${body}`;
 }
 
 $('#tCard').addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const p = tr.cur; const act = b.dataset.act;
   if (act === 'all') { tr.filter = 'all'; syncFilter(); buildQueue(); return nextPuzzle(); }
+  if (act === 'goStats') { tab('stats'); return; }
   if (!p) return;
   if (act === 'hint') { tr.hint = true; drawTrain(); }
   else if (act === 'show') { record('fail'); tr.phase = 'shown'; tr.view = null; drawTrain(); announce(`The best move was ${p.bestSan}.`); }

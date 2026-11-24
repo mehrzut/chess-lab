@@ -560,8 +560,10 @@ tbody tr.click:hover { background: var(--raise); }
 .boardBox { border-radius: 16px; }
 .board { border-radius: 14px; border: 2px solid color-mix(in srgb, var(--line-strong) 80%, transparent); box-shadow: 0 6px 0 color-mix(in srgb, var(--line-strong) 75%, transparent), 0 18px 36px rgba(31, 52, 38, .14); }
 .sq.sel::before { background: color-mix(in srgb, var(--accent) 40%, transparent); }
-.sq.dest::after { background: color-mix(in srgb, var(--fg) 26%, transparent); }
-.sq.dest.cap::after { border-color: color-mix(in srgb, var(--fg) 26%, transparent); }
+/* the squares look the same in both themes, so the move dots must too (var(--fg) is near
+   white in dark mode, which made them vanish on light squares) */
+.sq.dest::after { background: rgba(16, 38, 22, .45); }
+.sq.dest.cap::after { border-color: rgba(16, 38, 22, .45); }
 .sq.hint { box-shadow: inset 0 0 0 4px var(--accent), inset 0 0 20px var(--accent); }
 .sq.hl::before { background: color-mix(in srgb, var(--gold) 55%, transparent); }
 .mk { border: 2px solid var(--panel); box-shadow: 0 2px 5px rgba(0, 0, 0, .35); }

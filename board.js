@@ -47,6 +47,23 @@ function arrowsSvg(arrows, flip) {
 }
 const uciArrow = (u, color, op, w) => (u && u.length >= 4 ? { from: u.slice(0, 2), to: u.slice(2, 4), color, op, w } : null);
 
+/* the promotion picker; its few styles live here with it, so the board works on its own.
+   Fixed light colours, like the squares, so black pieces show in the dark theme too. */
+const PROMO_PIECES = ['q', 'n', 'r', 'b'];
+const PIECE_LABEL = { q: 'Queen', n: 'Knight', r: 'Rook', b: 'Bishop' };
+function addPromoCss() {
+  if (document.getElementById('promoCss')) return;
+  const s = document.createElement('style'); s.id = 'promoCss';
+  s.textContent = `.promoPick { position: absolute; inset: 0; z-index: 20; background: rgba(15, 27, 22, .45); }
+.promoPick button { all: unset; box-sizing: border-box; position: absolute; width: 12.5%; height: 12.5%; display: grid; place-items: center; cursor: pointer;
+  background: #f4f6ea; border-radius: 50%; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); transition: border-radius .12s, background-color .12s; }
+.promoPick button:hover, .promoPick button:focus-visible { border-radius: 12%; background: #d6efc0; }
+.promoPick button:focus-visible { outline: 3px solid var(--accent, #58cc02); outline-offset: -3px; }
+.promoPick img { width: 86%; height: 86%; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .promoPick button { transition: none; } }`;
+  document.head.appendChild(s);
+}
+
 /* An interactive board inside `box` (which holds a .board div and an svg.arrows).
    set({ fen, flip, last, badge, marks, arrows, movable, onMove }) then it redraws.
    movable: null (view only), 'w', 'b' or 'turn' (whichever side is to move). */
@@ -77,10 +94,33 @@ function makeBoard(box) {
   function select(sq) { b.sel = sq; b.dests = sq ? destsOf(sq) : []; }
   function play(from, to) {
     const cell = fenCells(b.o.fen).find((c) => c.sq === from);
-    const promo = cell && cell.p && cell.p.toLowerCase() === 'p' && (to[1] === '8' || to[1] === '1') ? 'q' : undefined;
+    const promo = cell && cell.p && cell.p.toLowerCase() === 'p' && (to[1] === '8' || to[1] === '1');
     select(null); render();
-    if (b.o.onMove) b.o.onMove({ from, to, promotion: promo });
+    if (promo) return pickPromotion(from, to, cell.p === 'P' ? 'w' : 'b');
+    if (b.o.onMove) b.o.onMove({ from, to });
   }
+  /* A pawn reaching the last rank: the four pieces stand in a column on that file, from the
+     promotion square towards the middle. Escape or a click beside them cancels the move. */
+  function pickPromotion(from, to, color) {
+    closePromotion(); addPromoCss();
+    let col = FILES.indexOf(to[0]), row = 8 - +to[1]; if (b.o.flip) { col = 7 - col; row = 7 - row; }
+    const pick = document.createElement('div');
+    pick.className = 'promoPick'; pick.setAttribute('role', 'dialog'); pick.setAttribute('aria-label', 'Promote the pawn to');
+    pick.innerHTML = PROMO_PIECES.map((p, k) => `<button type="button" data-p="${p}" aria-label="${PIECE_LABEL[p]}" style="left:${col * 12.5}%;top:${(row === 0 ? k : 7 - k) * 12.5}%">${pieceImg(color === 'w' ? p.toUpperCase() : p)}</button>`).join('');
+    // the release of the press that made the move can land on the picker: only a press that
+    // starts on it (or a key) counts, so that release never picks the queen by itself
+    let pressed = false;
+    pick.addEventListener('pointerdown', () => { pressed = true; });
+    pick.addEventListener('click', (e) => {
+      if (e.detail > 0 && !pressed) return;
+      const btn = e.target.closest('button[data-p]'); closePromotion();
+      if (btn && b.o.onMove) b.o.onMove({ from, to, promotion: btn.dataset.p });
+    });
+    pick.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePromotion(); } });
+    box.appendChild(pick); b.promo = pick;
+    pick.querySelector('button').focus();
+  }
+  function closePromotion() { if (b.promo) { b.promo.remove(); b.promo = null; } }
 
   el.addEventListener('pointerdown', (e) => {
     if (!b.o.movable || e.button > 0) return;
@@ -119,7 +159,7 @@ function makeBoard(box) {
 
   b.set = (o) => {
     const posChanged = o.fen !== b.o.fen || o.movable !== b.o.movable;
-    b.o = { ...o }; if (posChanged) select(null);
+    b.o = { ...o }; if (posChanged) { select(null); closePromotion(); }
     if (!b.drag) render();
   };
   b.hint = (marks) => { b.o.marks = marks; render(); };

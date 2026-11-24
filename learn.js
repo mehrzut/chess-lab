@@ -90,6 +90,88 @@ function lastMoveThreats(fen, last) {
     .map((s) => ({ sq: s, piece: m[s].toLowerCase(), by: mover.toLowerCase() }));
 }
 
+/* ---------- the board in words (for the teacher) ----------
+   A language model misreads FEN strings: it will call a defended piece hanging or say a
+   queen was captured when a knight was. So the teacher gets the board spelled out:
+   piece lists, what each move does, and who attacks and defends the squares involved. */
+const SIDE = { w: 'White', b: 'Black' };
+const PIECE_ORDER = 'kqrbnp';
+const pieceAt = (m, sq) => `${SIDE[pieceColor(m[sq])]}'s ${PIECE_NAME[m[sq].toLowerCase()]} on ${sq}`;
+const pieceList = (m, sqs) => (sqs.length ? sqs.map((s) => pieceAt(m, s)).join(', ') : '');
+/* "White: king g1, queen h3, rooks a1 and d1, pawns b3, c2 ..." for each side */
+function piecesText(fen) {
+  const m = boardMap(fen);
+  return ['w', 'b'].map((c) => {
+    const parts = [...PIECE_ORDER].map((t) => {
+      const sqs = Object.keys(m).filter((s) => m[s] === (c === 'w' ? t.toUpperCase() : t)).sort();
+      if (!sqs.length) return '';
+      return `${PIECE_NAME[t]}${sqs.length > 1 ? 's' : ''} ${sqs.length > 1 ? sqs.slice(0, -1).join(', ') + ' and ' + sqs[sqs.length - 1] : sqs[0]}`;
+    }).filter(Boolean);
+    return `${SIDE[c]}: ${parts.join(', ')}.`;
+  }).join(' ');
+}
+/* the square a capture removes a piece from (differs from mv.to only en passant) */
+const capturedSq = (mv) => (mv.flags.includes('e') ? mv.to[0] + mv.from[1] : mv.to);
+/* short form for lines: "White pawn g4 takes queen f5, check" */
+function stepWords(mv) {
+  if (mv.flags.includes('k') || mv.flags.includes('q')) return `${SIDE[mv.color]} castles ${mv.flags.includes('k') ? 'kingside' : 'queenside'}`;
+  let s = `${SIDE[mv.color]} ${PIECE_NAME[mv.piece]} ${mv.from} ${mv.captured ? `takes ${PIECE_NAME[mv.captured]} ${capturedSq(mv)}` : `to ${mv.to}`}`;
+  if (mv.promotion) s += `, becomes a ${PIECE_NAME[mv.promotion]}`;
+  if (/#$/.test(mv.san)) s += ', checkmate'; else if (/\+$/.test(mv.san)) s += ', check';
+  return s;
+}
+/* a line with every move spelled out: "29.gxf5 (White pawn g4 takes queen f5) 29...Bxh6 (...)" */
+function lineWords(fen, steps, tags) {
+  const san = lineText(fen, steps).split(' ');
+  return steps.map((x, i) => `${san[i]}${tags && tags[i] ? ` [${tags[i]}]` : ''} (${stepWords(x.mv)})`).join(' ');
+}
+/* what each side captures in a sequence of moves, e.g. { w: ['queen'], b: ['knight', 'bishop'] } */
+function capturesIn(mvs) {
+  const out = { w: [], b: [] };
+  mvs.forEach((mv) => { if (mv.captured) out[mv.color].push(PIECE_NAME[mv.captured]); });
+  return out;
+}
+/* Facts about one move, worked out from the board before it: what it does, whether the
+   piece it took was defended, and whether the piece that moved can be taken where it lands.
+   Attacks are counted the quick way (pins and pieces lined up behind each other are ignored). */
+function moveFacts(fenBefore, mv) {
+  const L = []; const m = boardMap(fenBefore); const me = mv.color; const opp = me === 'w' ? 'b' : 'w';
+  const castle = mv.flags.includes('k') || mv.flags.includes('q');
+  let s = castle ? stepWords(mv) : `${SIDE[me]}'s ${PIECE_NAME[mv.piece]} moves from ${mv.from} to ${mv.to}`;
+  if (mv.captured) s += ` and captures ${pieceAt(m, capturedSq(mv))}${mv.flags.includes('e') ? ' en passant' : ''}`;
+  if (mv.promotion) s += ` and becomes a ${PIECE_NAME[mv.promotion]}`;
+  if (/#$/.test(mv.san)) s += '. It is checkmate'; else if (/\+$/.test(mv.san)) s += ', giving check';
+  L.push(s + '.');
+  if (mv.captured) {
+    const def = attackMap(m)[opp][capturedSq(mv)] || [];
+    L.push(`Before the move, ${pieceAt(m, capturedSq(mv))} was ${def.length ? `defended by ${pieceList(m, def)}` : 'not defended by any piece'}.`);
+  }
+  if (castle) return L;
+  const ch = new Chess(fenBefore); ch.move({ from: mv.from, to: mv.to, promotion: mv.promotion });
+  const m2 = boardMap(ch.fen()); const a2 = attackMap(m2);
+  const att = a2[opp][mv.to] || [], def = a2[me][mv.to] || [];
+  const here = pieceAt(m2, mv.to);
+  if (att.length) L.push(`After the move, ${here} can be captured by ${pieceList(m2, att)}; it is ${def.length ? `defended by ${pieceList(m2, def)}` : 'not defended by any piece'}.`);
+  else L.push(`After the move, nothing can capture ${here}.`);
+  const hits = attacksFrom(m2, mv.to).filter((t) => m2[t] && pieceColor(m2[t]) === opp && m2[t].toLowerCase() !== 'k');
+  if (hits.length) L.push(`From ${mv.to} it now attacks ${pieceList(m2, hits)}.`);
+  return L;
+}
+/* "26.g4 Bg5 27.Ra1 Rh8 28.f3": the moves (SAN) that led to fen, numbered backwards from it */
+function recentText(fen, sans) {
+  const p = fen.split(' ');
+  let w = p[1] !== 'w'; // the side that made the last move
+  let n = (+p[5] || 1) - (w ? 0 : 1);
+  const out = [];
+  for (let i = sans.length - 1; i >= 0; i--) { out.unshift({ san: sans[i], n, w }); if (w) n--; w = !w; }
+  return out.map((x, k) => (x.w ? `${x.n}.${x.san}` : k === 0 ? `${x.n}...${x.san}` : x.san)).join(' ');
+}
+/* move number and side of each step of a line that starts at fen */
+function stepNums(fen, count) {
+  const p = fen.split(' '); const n0 = +p[5] || 1; const w0 = p[1] === 'w';
+  return Array.from({ length: count }, (_, k) => ({ n: n0 + Math.floor((k + (w0 ? 0 : 1)) / 2), w: w0 ? k % 2 === 0 : k % 2 === 1 }));
+}
+
 /* ---------- engine lines ---------- */
 const pvOf = (e) => (e && e.pv && e.pv.length ? e.pv : (e && e.best && e.best !== '(none)' ? [e.best] : []));
 function playLine(fen, ucis, max = 10) {

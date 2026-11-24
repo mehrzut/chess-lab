@@ -110,7 +110,7 @@ async function chatOnce(c, s, messages, onText, signal) {
   const model = smodel(c, s); let r;
   const send = (extra) => fetch(sbase(c, s) + '/chat/completions', {
     method: 'POST', headers: apiHeaders(c, s), signal,
-    body: JSON.stringify({ model, messages, stream: true, temperature: c.tone === 'roast' ? 0.7 : 0.4, ...extra }),
+    body: JSON.stringify({ model, messages, stream: true, temperature: c.tone === 'roast' ? 0.6 : 0.3, ...extra }),
   });
   try {
     r = await send(lowEffort(model) ? { reasoning_effort: 'low' } : {});
@@ -280,6 +280,10 @@ function reviewCtx() {
     best: playLine(s.fens[i], pvOf(eb), 8), ref: playLine(s.fens[ply], pvOf(ea), 8),
     ex: c.ex, hint: null, hideBest: false, tag: c.ex && c.ex.tag,
     lastBefore: s.moves[i - 1] || null, lastAfter: m,
+    recent: () => s.moves.slice(Math.max(0, i - 5), i).map((x) => x.san),
+    // what was really played next; every game move was analyzed, so these are checked too
+    next: s.moves.slice(ply, ply + 6).map((x, k) => ({ mv: x, uci: uciOf(x), fen: s.fens[ply + k + 1] })),
+    nextTags: rv.cls.slice(ply, ply + 6).map((x) => x && x.label),
     context: [`The student plays ${sideWord(me)} against ${s.g.oppName}${s.g.oppRating ? ` (rated ${s.g.oppRating})` : ''}.`, s.g.variation ? `Opening: ${s.g.variation}.` : '', `Game phase: ${phaseOf(s.fens, i)}.`].filter(Boolean).join(' '),
   };
 }
@@ -295,6 +299,7 @@ function playCtx() {
     bestUci: f.pre.best, bestPv: pvOf(f.pre), refUci: f.post.best,
     best: playLine(f.before, pvOf(f.pre), 8), ref: playLine(after, pvOf(f.post), 8),
     ex: f.ex, hint: hintText(f), hideBest: !f.better, tag: null, lastBefore: null, lastAfter: null,
+    recent: () => pl.ch.history().slice(0, -1).slice(-5), next: null, nextTags: null,
     context: `This is a practice game. The student plays ${sideWord(pl.color)} against ${levelName(pl.elo)}. Game phase: ${phaseAt(f.before)}.`,
   };
 }
@@ -321,22 +326,43 @@ function restartExplore() {
   if (state.mode === 'explore' && state.ex) { state.ex.linesFen = null; renderGame(); }
 }
 
+/* Everything is spelled out in words: the model reads piece lists and sentences reliably,
+   but misreads a FEN (it once said a queen was captured when a knight was, and called a
+   pawn-defended knight undefended). */
 function factsText(ctx, top) {
   const L = [];
   const wp = (cp, s) => Math.round(winPct(cp * s));
-  L.push('POSITION', `- ${ctx.context}`, `- Position before the move (FEN): ${ctx.fenBefore}`, `- Before the move, ${matWords(ctx.fenBefore, ctx.me)}.`);
-  L.push('', 'THE MOVE', `- ${ctx.label}, played by ${ctx.mine ? 'the student' : "the student's opponent"}.`);
+  const opp = ctx.me === 'w' ? 'b' : 'w';
+  const mine = (c) => (c === ctx.me ? 'the student' : 'the opponent');
+  L.push('POSITION', `- ${ctx.context}`, `- The student is ${sideWord(ctx.me)}; the opponent is ${sideWord(opp)}.`);
+  const recent = ctx.recent ? ctx.recent() : [];
+  if (recent.length) L.push(`- The moves just before: ${recentText(ctx.fenBefore, recent)}`);
+  L.push(`- Pieces on the board before the move. ${piecesText(ctx.fenBefore)}`, `- Before the move, ${matWords(ctx.fenBefore, ctx.me)}.`);
+  L.push('', 'THE MOVE', `- ${ctx.label}, played by ${ctx.mine ? 'the student' : "the student's opponent"} (${sideWord(ctx.mover)}).`);
+  const played = playLine(ctx.fenBefore, [ctx.uci])[0];
+  if (played) moveFacts(ctx.fenBefore, played.mv).forEach((x) => L.push('- ' + x));
   const ms = ctx.mover === 'w' ? 1 : -1;
   L.push(`- Stockfish's verdict: ${ctx.cls.label}. ${ctx.mine ? "The student's" : "The opponent's"} winning chances went from ${wp(ctx.cpBefore, ms)}% to ${wp(ctx.cpAfter, ms)}%.`);
   L.push(`- Evaluation before the move: ${evWords(ctx.cpBefore)}. After: ${evWords(ctx.cpAfter)}.`);
+  const before = wp(ctx.cpBefore, ms);
+  if (before <= 15) L.push(`- ${sideWord(ctx.mover)} was already losing before this move (winning chances ${before}%). Every move loses, so a good verdict here means the least bad option, not a good position.`);
   if (ctx.cls.t === 'brill') L.push('- The app calls a move brilliant when it is close to the best move and gives up material for less than it is worth.');
   const isBest = ctx.uci === ctx.bestUci;
   if (isBest) L.push("- This was Stockfish's top choice.");
   else if (!ctx.hideBest && ctx.best.length) {
     const word = ['inacc', 'mist', 'blun'].includes(ctx.cls.t) ? 'Better move' : "Stockfish's top choice";
-    L.push(`- ${word}: ${ctx.best[0].mv.san}. Stockfish's line: ${lineText(ctx.fenBefore, ctx.best.slice(0, 7))}`);
+    L.push(`- ${word}: ${ctx.best[0].mv.san}. Stockfish's line, move by move: ${lineWords(ctx.fenBefore, ctx.best.slice(0, 6))}`);
   }
-  if (ctx.ref.length) L.push(`- After the move, Stockfish's best reply and line: ${lineText(ctx.fenAfter, ctx.ref.slice(0, 7))}`);
+  if (ctx.ref.length) {
+    const ref = ctx.ref.slice(0, 6);
+    L.push(`- After the move, Stockfish's best reply and line, move by move: ${lineWords(ctx.fenAfter, ref)}`);
+    if (played) {
+      const cap = capturesIn([played.mv, ...ref.map((x) => x.mv)]);
+      if (cap.w.length || cap.b.length) L.push(`- Counting the move and that line: ${['w', 'b'].map((c) => `${sideWord(c)} (${mine(c)}) captures ${cap[c].length ? cap[c].join(', ') : 'nothing'}`).join('; ')}. At the end of the line, ${matWords(ref[ref.length - 1].fen, ctx.me)}.`);
+    }
+  }
+  if (ctx.next && ctx.next.length) L.push(`- What was actually played next in the game, with Stockfish's verdict on each move: ${lineWords(ctx.fenAfter, ctx.next, ctx.nextTags)}`);
+  else if (ctx.where === 'review') L.push('- This was the last move of the game.');
   if (ctx.ex && ctx.ex.type !== 'opp' && MTYPES[ctx.ex.type]) {
     L.push(`- Mistake type (from the app's rules): ${MTYPES[ctx.ex.type].label}.`);
     const txt = ctx.hideBest ? (SPOILER_FREE.includes(ctx.ex.type) ? ctx.ex.text : ctx.hint) : ctx.ex.text;
@@ -344,38 +370,40 @@ function factsText(ctx, top) {
   } else if (ctx.ex && ctx.ex.type === 'opp') L.push(`- The app's explanation: ${ctx.ex.text}`);
   if (ctx.tag) L.push(`- Clock: ${ctx.tag.text}`);
   const lp = loosePieces(ctx.fenAfter);
-  if (lp.length) L.push(`- Loose pieces after the move (attacked and not defended, or attacked by something cheaper; a quick check that ignores pins): ${lp.map((x) => `${x.color === ctx.me ? "the student's" : "the opponent's"} ${PIECE_NAME[x.piece]} on ${x.sq}`).join(', ')}.`);
+  if (lp.length) L.push(`- Loose pieces after the move (attacked and not defended, or attacked by something cheaper; a quick check that ignores pins): ${lp.map((x) => `${sideWord(x.color)}'s ${PIECE_NAME[x.piece]} on ${x.sq} (${mine(x.color)})`).join(', ')}.`);
+  else L.push('- After the move, no piece of either side is loose (attacked and undefended, or attacked by something cheaper).');
   if (!ctx.hideBest && top && top.length > 1) {
-    L.push('', "STOCKFISH'S BEST MOVES IN THE POSITION BEFORE THE MOVE (best first)");
+    L.push('', `STOCKFISH'S BEST MOVES FOR ${sideWord(ctx.mover).toUpperCase()} IN THE POSITION BEFORE THE MOVE (best first)`);
     top.forEach((l) => L.push(`- ${l.steps[0].mv.san}: ${evWords(l.cp)}. Line: ${lineText(ctx.fenBefore, l.steps.slice(0, 6))}`));
   }
   if (ctx.hideBest) L.push('', 'NOTE: The student is still looking for a better move themselves, so the better move is deliberately left out of these facts.');
   return L.join('\n');
 }
 const TONES = {
-  roast: "You are a cheeky, sarcastic chess teacher inside Chess Lab, talking with one student who asked to be roasted. Tease their bad moves with playful, funny insults, like a friend who coaches by mocking (for example: \"Your knight didn't develop, it emigrated.\" or \"Bold of you to give away a rook for free. Generous, even.\"). At most one short joke per answer, then get straight to the point: the lesson matters more than the joke. Mock the moves, never the person: nothing about their intelligence, looks, identity or life outside chess, no swearing, nothing cruel. When they play well, give grudging, funny praise.",
+  roast: "You are a cheeky, sarcastic chess teacher inside Chess Lab, talking with one student who asked to be roasted. Tease their bad moves with playful, funny insults, like a friend who coaches by mocking (for example: \"Your knight didn't develop, it emigrated.\" or \"Bold of you to give away a rook for free. Generous, even.\"). At most one short joke per answer, and only about what really happened in FACTS, then get straight to the point: the lesson matters more than the joke. Mock the moves, never the person: nothing about their intelligence, looks, identity or life outside chess, no swearing, nothing cruel. When they play well, give grudging, funny praise.",
   kind: 'You are a warm, encouraging chess teacher inside Chess Lab, talking with one student.',
 };
 function systemPrompt(ctx) {
   const rules = [
     TONES[tcfg().tone] || TONES.roast,
     '',
-    "How this works: Stockfish, a chess engine, has already analysed the position, and the app's rules have worked out what kind of mistake a move was. Those results are in FACTS below and they are correct. Your only job is to explain them so the student understands and remembers the idea.",
+    "How this works: Stockfish, a chess engine, has already analysed the position, and the app's rules have worked out what kind of mistake a move was. Those results are in FACTS below and they are correct. FACTS also spell out the board in words: which pieces stand where, what each move captures, which pieces defend what, and what happened next. Your only job is to explain them so the student understands and remembers the idea.",
     '',
     'Rules:',
-    '1. Never invent or calculate moves, lines or evaluations yourself. Only mention moves that appear in FACTS or in a "STOCKFISH CHECKED" note, written exactly as given (standard notation such as Nf3, exd5, O-O).',
-    '2. If the student asks about a move that has not been checked, say you can only judge moves Stockfish has checked, and ask them to type it in notation (like Nf3) so it can be checked.',
-    '3. Say plainly what went wrong and why, naming the pattern (loose piece, fork, pin, skewer, back rank, king safety and so on), and what the better move does instead.',
-    '4. Be short, clear and direct: 2 or 3 sentences, about 50 words at most. No bullet points, no headings, no introduction, and do not repeat the question or the facts back. Go longer only when the student asks for more detail.',
-    '5. Use the STUDENT PROFILE only when it matters: if this is a mistake they make often, say so in a few words. Do not recite the profile.',
-    "6. Match the student's level, and use plain words rather than jargon.",
-    '7. Prefer saying less: one clear idea beats three half-explained ones.',
-    '8. Talk to the student as "you". Never claim to be Stockfish.',
+    '1. Every claim about the board must come from FACTS. Never work out yourself which piece stands where, what was captured, or whether a piece is defended, hanging or trapped. If FACTS do not say it, do not say it.',
+    '2. Never invent or calculate moves, lines or evaluations. Only mention moves that appear in FACTS or in a "STOCKFISH CHECKED" note, written exactly as given (standard notation such as Nf3, exd5, O-O), with the move number FACTS give it.',
+    '3. A question that names no move is about THE MOVE: answer it from FACTS. Only when the student names a specific move that is not in FACTS or a STOCKFISH CHECKED note, say Stockfish has not checked it yet and ask them to type it in notation (like Nf3).',
+    '4. If the question rests on something FACTS contradict (for example that a piece was free when FACTS say it was defended), say so plainly and explain what really happened. If one of your earlier answers in this chat contradicts FACTS, FACTS win: correct it in one short sentence.',
+    "5. For the opponent's move, explain why they played it: what it captured or threatened, what the student could reply (Stockfish's best reply), and what each side ended up with. When the opponent was already losing, say their move was the least bad option.",
+    '6. Otherwise say plainly what went wrong and why, naming the pattern (loose piece, fork, pin, skewer, back rank, king safety and so on), and what the better move does instead.',
+    '7. Be short, clear and direct: 2 or 3 sentences, about 60 words at most. No bullet points, no headings, no introduction, and do not repeat the question or the facts back. Go longer only when the student asks for more detail.',
+    '8. Use the STUDENT PROFILE only when it matters: if this is a mistake they make often, say so in a few words. Do not recite the profile.',
+    "9. Match the student's level and use plain words. Talk to the student as \"you\". Never claim to be Stockfish.",
   ];
   if (ctx.hideBest) {
-    rules.push('9. The student is still looking for a better move. Do not name, hint at or guess a specific move, piece to move or square. Help them search: explain what their move allows and what to look at (checks, captures, threats, loose pieces). End with one short question for them to think about, not with a takeaway.');
+    rules.push('10. The student is still looking for a better move. Do not name, hint at or guess a specific move, piece to move or square. Help them search: explain what their move allows and what to look at (checks, captures, threats, loose pieces). End with one short question for them to think about, not with a takeaway.');
   } else {
-    rules.push('9. In your first answer about this position, end with one line that starts with "Takeaway:" followed by one habit to remember, in 12 words or fewer.');
+    rules.push('10. In your first answer about this position, end with one line that starts with "Takeaway:" followed by one habit to remember, in 12 words or fewer. It must follow from what happened in FACTS.');
   }
   return rules.join('\n');
 }
@@ -456,6 +484,7 @@ function ctxLines(ctx, cv) {
   add(ctx.fenBefore, playLine(ctx.fenBefore, [ctx.uci]), ctx.lastBefore, 'The move played');
   add(ctx.fenAfter, ctx.ref, ctx.lastAfter, ctx.mine ? 'Their best reply' : 'The best answer');
   if (!ctx.hideBest) { add(ctx.fenBefore, ctx.best, ctx.lastBefore, "Stockfish's line"); (cv.top || []).forEach((l) => add(ctx.fenBefore, l.steps, ctx.lastBefore, "Stockfish's line")); }
+  add(ctx.fenAfter, ctx.next, ctx.lastAfter, 'What happened in the game');
   return out.concat(cv.asked);
 }
 
@@ -593,16 +622,22 @@ function paintStream(cv) {
   });
 }
 
-/* every SAN move in the lines Stockfish supplied -> where to step through it */
+/* every SAN move in the lines Stockfish supplied -> where to step through it, with its move
+   number, so "30.Qxh6" only counts as checked when some line has Qxh6 as move 30 */
 function knownMoves(lines) {
   const m = new Map();
-  lines.forEach((l, li) => l.steps.forEach((x, k) => { const san = x.mv.san.replace(/[+#]$/, ''); if (!m.has(san)) m.set(san, { li, k: k + 1 }); }));
+  lines.forEach((l, li) => {
+    const nums = stepNums(l.root, l.steps.length);
+    l.steps.forEach((x, k) => { const san = x.mv.san.replace(/[+#]$/, ''); if (!m.has(san)) m.set(san, []); m.get(san).push({ li, k: k + 1, n: nums[k].n }); });
+  });
   return m;
 }
-const A_SAN = /(?<![\w-])(\d+\.(?:\.\.)?\s?)?(O-O-O|O-O|[KQRBN][a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?|[a-h]x[a-h][1-8](?:=[QRBN])?|[a-h][1-8](?:=[QRBN])?)([+#])?(?![\w-])/g;
+/* a move number before a move: "12.", "12...", "12…", "12. ..." or a bare "12 " before a piece move */
+const A_SAN = /(?<![\w-])(\d+(?:\.\s?(?:\.\.|…)?|…)\s?|\d+\s(?=[KQRBNO]))?(O-O-O|O-O|[KQRBN][a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?|[a-h]x[a-h][1-8](?:=[QRBN])?|[a-h][1-8](?:=[QRBN])?)([+#])?(?![\w-])/g;
 function movesHtml(h, known, where) {
   return h.replace(A_SAN, (all, num, san, chk) => {
-    const hit = known.get(san); const bare = /^[a-h][1-8](=[QRBN])?$/.test(san);
+    const at = known.get(san) || []; const n = num ? parseInt(num, 10) : null;
+    const hit = n == null ? at[0] : at.find((x) => x.n === n); const bare = /^[a-h][1-8](=[QRBN])?$/.test(san);
     if (bare && !num) return all; // "the pawn on e5" is a square, not a move
     const pre = num || ''; const txt = san + (chk || '');
     if (hit) {

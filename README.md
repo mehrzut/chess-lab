@@ -64,7 +64,7 @@ The first deploy asks whether to create the project. Choose production branch `m
 
 ## The teacher
 
-Stockfish and the rules above decide everything: the best move, what a move allows and the type of mistake. The teacher gets those facts, Stockfish's three best moves and a short profile of you, and it is told to only put them into words. If you ask about a move, Stockfish checks it first and the result goes to the teacher with your question. If an answer names a move Stockfish did not supply, that move gets a dotted underline. Click it and Stockfish checks it. Checked moves are chips you can click to step through the line.
+Stockfish and the rules above decide everything: the best move, what a move allows and the type of mistake. The teacher gets those facts, Stockfish's three best moves and a short profile of you, and it is told to only put them into words. The board is spelled out in plain sentences rather than as a FEN, which language models misread: where every piece stands, what the move captured, whether that piece was defended, what can take the piece that moved, what each move in Stockfish's lines captures, and (in game review) what was actually played next. If you ask about a move, Stockfish checks it first and the result goes to the teacher with your question. If an answer names a move Stockfish did not supply, that move gets a dotted underline. Click it and Stockfish checks it. Checked moves are chips you can click to step through the line.
 
 The teacher is off until you open Teacher (top right) and add a key. It works with any OpenAI-compatible service that allows calls from a web page:
 
